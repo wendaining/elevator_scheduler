@@ -1224,3 +1224,165 @@ Step 2：电梯发现已经到达目标楼层，方向变 idle，开门，清空
 ```
 
 一旦后续改坏了 `Step()`，测试会立刻失败，并指出哪个状态不符合预期。
+
+## 2026-05-06：重构 API 的位置
+
+之前提到过 API 的结构一般放在 `api` 包内，所以这次重构了一下。
+
+这里主要是注意 Go 的包机制：
+
+两个关键规则：
+
+  1. 不同包之间要通过 import 才能互相使用。 main.go 属于 package main，handler.go 属于
+  package api，它们是不同的包。所以 main.go 必须 import 才能调用 api 包里的函数。
+  2. 只有首字母大写的名字才能被其他包访问。 当前函数叫 handleHome（小写开头），这在 Go
+  里是"未导出"的，只能在 api 包内部使用。移到 internal/api/handler.go
+  后需要改成大写开头，比如 HandleHome。
+
+还有一点就是之前类似 `mux.HandleFunc("/", api.HandleHome)` 也是放在 `main.go` 里面的，但是这个也不是很符合工程规范。故抽离成 `RegisterRoutes(mux *http.ServeMux)` 函数，放在 `api` 包内。
+
+## 2026-05-06：用 struct 模式重构 API 依赖传递
+
+本阶段目标：handler 需要访问 `*elevator.System` 才能返回电梯状态，但 handler 函数签名是固定的 `func(w, r)`，不能加参数。解决这个"依赖如何传入 handler"的问题。
+
+### 三种方式的对比
+
+handler 函数签名被 `net/http` 固定死了，所以依赖不能通过参数传入。Go 里常见的三种解决方式：
+
+**方式一：包级变量**
+
+```go
+var system *elevator.System  // 包级全局变量
+
+func handleState(w http.ResponseWriter, r *http.Request) {
+    data, _ := system.Snapshot()  // 直接引用包级变量
+}
+```
+
+优点：最简单，不需要额外结构。
+缺点：测试时多个测试共享同一个变量，互相干扰；依赖多了以后全局变量散落各处，不清楚谁用了谁。
+
+**方式二：闭包**
+
+```go
+func handleState(system *elevator.System) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        data, _ := system.Snapshot()  // 闭包捕获了 system
+    }
+}
+
+// 注册时
+mux.HandleFunc("/api/state", handleState(system))
+```
+
+优点：比包级变量干净，依赖通过参数明确传入。
+缺点：每新增一个依赖，所有工厂函数的参数列表都要膨胀，`RegisterRoutes` 也跟着膨胀。
+
+**方式三：struct 持有依赖**
+
+```go
+type Server struct {
+    System *elevator.System
+}
+
+func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
+    data, _ := s.System.Snapshot()  // 通过 receiver 访问
+}
+```
+
+优点：所有 handler 共享同一个"工具箱"，新增依赖只需在 `Server` 里加字段，不影响方法签名和路由注册。
+缺点：比包级变量多写一点结构代码。
+
+### 为什么选择 struct 方式
+
+当前项目虽然依赖不多，但后续 API 会越来越多（`/api/state`、`/api/request` 等），它们都需要 `System`。struct 方式只用写一次 `Server`，之后所有 handler 都通过 `s.System` 访问，不用每次传参。
+
+### 修改后的 handler.go
+
+```go
+package api
+
+import (
+    "encoding/json"
+    "net/http"
+
+    "os_sp26_proj1/internal/elevator"
+)
+
+type Server struct {
+    System *elevator.System
+}
+
+func (s *Server) RegisterRoutes(mux *http.ServeMux) {
+    mux.HandleFunc("/", s.handleHome)
+    mux.HandleFunc("/api/health", s.handleHealth)
+    mux.HandleFunc("/api/state", s.handleState)
+}
+```
+
+关键变化：
+
+- 新增 `Server` struct，目前只持有 `*elevator.System`。后续加配置、日志等依赖直接在这里加字段。
+- 所有 handler 从普通函数变成了 `Server` 的方法（`func (s *Server) handleXxx(...)`）。
+- `RegisterRoutes` 也改成方法，这样注册路由时 handler 自然能通过 `s` 访问 `System`。
+- `handleState` 实现了：调用 `s.System.Snapshot()` 返回 JSON。
+
+### Go 语法细节：方法（method）
+
+```go
+func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
+```
+
+括号里的 `(s *Server)` 叫 receiver。意思是：这个函数"挂在" `Server` 类型上，调用时用 `s` 访问 `Server` 实例的字段。
+
+调用方式：
+
+```go
+server := &api.Server{System: system}
+server.handleState(w, r)   // 通过实例调用
+```
+
+也可以直接用作 handler：
+
+```go
+mux.HandleFunc("/api/state", server.handleState)   // Go 自动处理 receiver
+```
+
+### 修改后的 main.go
+
+```go
+func main() {
+    system, err := elevator.NewSystem(20, 5)
+    if err != nil {
+        log.Fatalf("failed to create elevator system: %v", err)
+    }
+
+    server := &api.Server{System: system}
+
+    mux := http.NewServeMux()
+    server.RegisterRoutes(mux)
+
+    addr := ":8080"
+    log.Printf("server listening on http://localhost%s", addr)
+    log.Fatal(http.ListenAndServe(addr, mux))
+}
+```
+
+现在 `main` 的职责清晰了：创建系统、创建 Server、注册路由、启动服务。具体的 API 处理逻辑全在 `api` 包里。
+
+### 本次验证
+
+已运行：
+
+```bash
+go build ./...
+go test ./...
+```
+
+结果通过：
+
+```text
+?       os_sp26_proj1/cmd/server          [no test files]
+?       os_sp26_proj1/internal/api        [no test files]
+ok      os_sp26_proj1/internal/elevator   0.002s
+```
