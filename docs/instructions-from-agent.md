@@ -6,20 +6,20 @@
 
 - [x] 创建基础目录：`cmd/server`、`internal/elevator`、`internal/api`、`web`
 - [x] 初始化 Go module：`go mod init os_sp26_proj1`
-- [ ] 写一个简短版 `AGENTS.md`，先说明本项目的协作原则
-- [ ] 在 `docs/record.md` 记录当前项目起点：目录已建立、Go module 已初始化、下一步准备做核心模型
-- [ ] 做一次小提交，提交类型可以是 `chore` 或 `docs`
+- [x] 写一个简短版 `AGENTS.md`，先说明本项目的协作原则
+- [x] 在 `docs/record.md` 记录当前项目起点：目录已建立、Go module 已初始化、下一步准备做核心模型
+- [x] 做一次小提交，提交类型可以是 `chore` 或 `docs`
 
 ## 1. 建立最小后端程序
 
 目标：先让 Go 后端能启动，不急着实现电梯算法。
 
-- [ ] 创建 `cmd/server/main.go`
-- [ ] 在 `main.go` 中启动一个最简单的 HTTP 服务
-- [ ] 提供一个健康检查接口，例如 `GET /api/health`
-- [ ] 用浏览器或 `curl` 验证接口可以访问
-- [ ] 理解 `net/http` 中 `HandleFunc` 和 `ListenAndServe` 的基本作用
-- [ ] 记录到 `docs/record.md`：第一次启动后端服务的命令、访问地址、遇到的问题
+- [x] 创建 `cmd/server/main.go`
+- [x] 在 `main.go` 中启动一个最简单的 HTTP 服务
+- [x] 提供一个健康检查接口，例如 `GET /api/health`
+- [x] 用浏览器或 `curl` 验证接口可以访问
+- [x] 理解 `net/http` 中 `HandleFunc` 和 `ListenAndServe` 的基本作用
+- [x] 记录到 `docs/record.md`：第一次启动后端服务的命令、访问地址、遇到的问题
 - [ ] 做一次小提交，例如 `feat: add minimal http server`
 
 ## 2. 设计电梯核心数据模型
@@ -148,16 +148,3 @@
 - [ ] 重要设计写入 `docs/record.md`，不要只留在聊天记录里
 - [ ] 每次提交前运行必要命令，例如 `go test ./...`
 - [ ] 提交信息使用 `feat`、`docs`、`chore`、`test` 等前缀
-
-## 现在最建议做的下一步
-
-当前最适合继续做的是：
-
-1. 写一个简短版 `AGENTS.md`
-2. 创建 `cmd/server/main.go`
-3. 实现 `GET /api/health`
-4. 运行 `go run ./cmd/server`
-5. 访问健康检查接口
-6. 把这一步记录到 `docs/record.md`
-
-完成这一步后，项目就从“目录和文档”进入“有一个可以启动的后端程序”的状态。
