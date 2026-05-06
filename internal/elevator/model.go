@@ -9,11 +9,6 @@ package elevator
 type Direction string
 
 // 这些常量是系统第一版使用的唯一方向值。
-//
-// Go 语法说明：
-//   - "const" 声明不应在运行时更改的值。
-//   - 名称以大写字母开头，因此其他包可以使用它们，如
-//     elevator.DirectionUp、elevator.DirectionDown 和 elevator.DirectionIdle。
 const (
 	DirectionIdle Direction = "idle"
 	DirectionUp   Direction = "up"
