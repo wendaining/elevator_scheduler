@@ -22,13 +22,13 @@ const (
 
 // RequestKind 描述请求的来源。
 //
-// in 请求在电梯外部创建，例如在 5 楼按下"上行"按钮。
-// out 请求在电梯内部创建，例如进入电梯后按下 12 楼按钮。
+// Hall 请求在电梯外部创建，例如在 5 楼按下"上行"按钮。
+// Cabin 请求在电梯内部创建，例如进入电梯后按下 12 楼按钮。
 type RequestKind string
 
 const (
-	RequestKindIn  RequestKind = "in"
-	RequestKindOut RequestKind = "out"
+	RequestKindHall  RequestKind = "hall"
+	RequestKindCabin RequestKind = "cabin"
 )
 
 // Request 表示一个乘客请求。
@@ -54,10 +54,6 @@ type Elevator struct {
 	Direction    Direction `json:"direction"`
 	DoorOpen     bool      `json:"doorOpen"`
 	// TargetFloors 是此电梯当前的简单任务列表。
-	//
-	// Go 语法说明：
-	//   - "[]int" 表示一个 int 类型的切片。
-	//   - 切片是 Go 中常用的可增长列表类型。
 	TargetFloors  []int `json:"targetFloors"`
 	EmergencyStop bool  `json:"emergencyStop"`
 }

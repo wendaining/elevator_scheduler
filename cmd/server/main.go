@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json" // 把 Go 里的数据编码成 JSON
-	"log" // 终端日志
+	"log"           // 终端日志
 	"net/http"
 )
 

@@ -20,34 +20,46 @@
 - [x] 用浏览器或 `curl` 验证接口可以访问
 - [x] 理解 `net/http` 中 `HandleFunc` 和 `ListenAndServe` 的基本作用
 - [x] 记录到 `docs/record.md`：第一次启动后端服务的命令、访问地址、遇到的问题
-- [ ] 做一次小提交，例如 `feat: add minimal http server`
+- [x] 做一次小提交，例如 `feat: add minimal http server`
 
 ## 2. 设计电梯核心数据模型
 
 目标：先把“系统状态”描述清楚，再写调度逻辑。
 
-- [ ] 创建 `internal/elevator/model.go`
-- [ ] 定义方向类型，例如 `DirectionUp`、`DirectionDown`、`DirectionIdle`
-- [ ] 定义请求类型，例如楼层请求和电梯内部目标楼层
-- [ ] 定义 `Elevator` 结构体，包含编号、当前楼层、方向、是否开门、目标楼层等字段
-- [ ] 定义 `System` 结构体，包含楼层数量、电梯列表、待处理请求等字段
-- [ ] 先不要加入 goroutine 和 channel，保持模型容易阅读
-- [ ] 写完后向 Agent 询问一次代码讲解，确认每个字段的含义
-- [ ] 做一次小提交，例如 `feat: define elevator state model`
+- [x] 创建 `internal/elevator/model.go`
+- [x] 定义方向类型，例如 `DirectionUp`、`DirectionDown`、`DirectionIdle`
+- [x] 定义请求类型，例如楼层请求和电梯内部目标楼层
+- [x] 定义 `Elevator` 结构体，包含编号、当前楼层、方向、是否开门、目标楼层等字段
+- [x] 定义 `System` 结构体，包含楼层数量、电梯列表、待处理请求等字段
+- [x] 先不要加入 goroutine 和 channel，保持模型容易阅读
+- [x] 写完后向 Agent 询问一次代码讲解，确认每个字段的含义
+- [x] 做一次小提交，例如 `feat: define elevator state model`
 
 ## 3. 实现同步版本的系统逻辑
 
 目标：先用普通函数模拟电梯移动，避免一开始就被并发复杂度干扰。
 
-- [ ] 创建 `internal/elevator/system.go`
-- [ ] 实现 `NewSystem(floors int, elevatorCount int)` 初始化函数
+- [x] 创建 `internal/elevator/system.go`
+- [x] 实现 `NewSystem(floors int, elevatorCount int)` 初始化函数
 - [ ] 实现添加请求的方法，例如 `AddHallRequest(floor int, direction Direction)`
-- [ ] 实现查看状态的方法，例如 `Snapshot()`
-- [ ] 实现一个简单的 `Step()` 方法：每调用一次，系统向前推进一个时间片
-- [ ] 初始调度策略可以非常简单：把请求分配给最近的空闲电梯，或者先只用第一部电梯
-- [ ] 手动写一个很小的测试或临时调用，验证请求进入后电梯会移动
-- [ ] 在 `docs/record.md` 记录：同步模拟为什么比一开始写并发更适合当前阶段
-- [ ] 做一次小提交，例如 `feat: add synchronous elevator simulation`
+- [x] 实现查看状态的方法，例如 `Snapshot()`
+- [x] 实现一个简单的 `Step()` 方法：每调用一次，系统向前推进一个时间片
+
+  这里的“时间片”可以先理解为一次离散模拟步，而不是现实中的一整段真实时间。比如每调用一次 `Step()`，系统只做一小步事情：电梯向目标楼层移动一层、到达目标楼层后开门、或者处理一个待分配请求。这样做的好处是逻辑容易观察和测试。后续如果前端每隔 500ms 调用一次后端推进逻辑，用户看到的就是电梯一格一格移动；如果写测试，也可以连续调用多次 `Step()` 来验证电梯状态如何变化。
+
+  示例：
+
+  ```text
+  初始状态：电梯在 1 楼，请求去 4 楼
+  Step 1：电梯从 1 楼移动到 2 楼
+  Step 2：电梯从 2 楼移动到 3 楼
+  Step 3：电梯从 3 楼移动到 4 楼
+  Step 4：电梯到达目标楼层，开门并移除该目标
+  ```
+
+- [x] 初始调度策略可以非常简单：把请求分配给最近的空闲电梯，或者先只用第一部电梯
+- [x] 手动写一个很小的测试或临时调用，验证请求进入后电梯会移动
+- [x] 做一次小提交，例如 `feat: add synchronous elevator simulation`
 
 ## 4. 暴露最小 HTTP API
 

@@ -804,3 +804,423 @@ JSON 字段名是：
 - 还没有并发逻辑。
 
 这一步只解决一个问题：先把电梯系统的核心状态描述出来。
+
+## 2026-05-06：实现 `NewSystem`
+
+本阶段目标：在 `internal/elevator/system.go` 中实现系统初始化函数。
+
+### 本次新增文件
+
+- `internal/elevator/system.go`：放和 `System` 相关的行为函数。
+
+### 当前实现
+
+```go
+func NewSystem(floors int, elevatorCount int) *System {
+	if floors < 1 {
+		floors = 1
+	}
+	if elevatorCount < 1 {
+		elevatorCount = 1
+	}
+
+	elevators := make([]Elevator, elevatorCount)
+	for i := range elevators {
+		elevators[i] = Elevator{
+			ID:            i + 1,
+			CurrentFloor: 1,
+			Direction:    DirectionIdle,
+			DoorOpen:     false,
+			TargetFloors: []int{},
+			EmergencyStop: false,
+		}
+	}
+
+	return &System{
+		FloorCount:      floors,
+		Elevators:       elevators,
+		PendingRequests: []Request{},
+	}
+}
+```
+
+### 这个函数做了什么
+
+`NewSystem` 是一个构造函数。Go 没有 class 构造函数语法，所以项目里通常会写一个 `NewXxx` 函数来创建对象。
+
+这个函数当前做了几件事：
+
+1. 接收楼层数 `floors` 和电梯数量 `elevatorCount`。
+2. 如果参数小于 1，就返回错误，不创建系统。
+3. 用 `make([]Elevator, elevatorCount)` 创建指定数量的电梯切片。
+4. 用 `for i := range elevators` 给每部电梯填入初始状态。
+5. 返回一个 `*System`，也就是指向 `System` 的指针。
+
+### Go 语法细节
+
+#### 为什么返回 `(*System, error)`
+
+```go
+func NewSystem(...) (*System, error)
+```
+
+这里返回了两个值：
+
+- `*System`：创建成功时返回系统对象。
+- `error`：创建失败时返回错误原因。
+
+可以先这样理解：后续系统会不断变化，例如添加请求、电梯移动、开门关门。如果多个函数都要操作同一个系统对象，使用指针更自然。
+
+Go 通常不使用“抛异常 / 捕获异常”的方式处理普通业务错误，而是让函数显式返回 `error`。调用方必须自己判断错误：
+
+```go
+system, err := elevator.NewSystem(20, 5)
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+这样做的好处是错误不会被偷偷吞掉。比如如果调用方传入：
+
+```go
+elevator.NewSystem(0, 5)
+```
+
+这明显是不合理的楼层数。与其强行把 `0` 改成 `1`，不如返回错误，让调用方知道自己传错了参数。
+
+当前实现使用：
+
+```go
+return nil, fmt.Errorf("floors must be at least 1, got %d", floors)
+```
+
+含义是：
+
+- 第一个返回值是 `nil`，表示没有成功创建 `System`。
+- 第二个返回值是一个错误，说明失败原因。
+
+#### 什么是 `make([]Elevator, elevatorCount)`
+
+`make` 可以创建 slice、map、channel。
+
+这里：
+
+```go
+elevators := make([]Elevator, elevatorCount)
+```
+
+表示创建一个长度为 `elevatorCount` 的 `[]Elevator`。
+
+如果 `elevatorCount` 是 5，那么会得到 5 个电梯位置，后面循环会逐个填入初始值。
+
+
+### 本次验证
+
+已运行：
+
+```bash
+gofmt -w internal/elevator/system.go
+go test ./...
+```
+
+结果通过：
+
+```text
+?   	os_sp26_proj1/cmd/server          [no test files]
+?   	os_sp26_proj1/internal/elevator   [no test files]
+```
+
+## 2026-05-06：实现 `Snapshot`
+
+本阶段目标：给 `System` 增加一个查看当前状态的方法，先返回 JSON，方便后续调试和 HTTP API 使用。
+
+### 当前实现
+
+```go
+func (s *System) Snapshot() ([]byte, error) {
+	return json.MarshalIndent(s, "", "  ")
+}
+```
+
+### 这个函数做了什么
+
+`Snapshot` 的意思是“快照”：在某一时刻，把系统当前状态拿出来看一眼。
+
+当前系统状态包括：
+
+- `FloorCount`
+- `Elevators`
+- `PendingRequests`
+
+因为这些字段在 `model.go` 里都写了 JSON tag，所以 `Snapshot()` 可以直接把整个 `System` 编码成 JSON。
+
+### 为什么返回 `[]byte, error`
+
+```go
+([]byte, error)
+```
+
+表示这个函数返回两个值：
+
+- `[]byte`：JSON 数据本身。HTTP 响应、文件写入、终端打印都可以使用字节切片。
+- `error`：JSON 编码失败时的错误。
+
+调用方以后可以这样使用：
+
+```go
+data, err := system.Snapshot()
+if err != nil {
+	return err
+}
+fmt.Println(string(data))
+```
+
+这里的：
+
+```go
+string(data)
+```
+
+是把 `[]byte` 转换成字符串，方便打印出来看。
+
+### 为什么用 `json.MarshalIndent`
+
+`json.MarshalIndent` 会生成带缩进的 JSON，比普通 `json.Marshal` 更适合人阅读。
+
+例如结果大概会像这样：
+
+```json
+{
+  "floorCount": 20,
+  "elevators": [
+    {
+      "id": 1,
+      "currentFloor": 1,
+      "direction": "idle",
+      "doorOpen": false,
+      "targetFloors": [],
+      "emergencyStop": false
+    }
+  ],
+  "pendingRequests": []
+}
+```
+
+后续真正写 HTTP API 时，可以直接把这段 JSON 写入响应：
+
+```go
+w.Header().Set("Content-Type", "application/json; charset=utf-8")
+w.Write(data)
+```
+
+不过到 API 阶段，也可以选择让 handler 自己调用 `json.NewEncoder(w).Encode(...)`。当前 `Snapshot()` 返回 JSON 主要是为了让模型阶段容易观察。
+
+## 2026-05-06：实现同步版 `Step`
+
+本阶段目标：先实现一个最简单的同步模拟步骤，让系统状态可以随着一次次调用 `Step()` 发生变化。
+
+### 当前策略
+
+这不是最终调度算法，只是一个临时的最小策略：
+
+```text
+如果有待处理请求，并且 1 号电梯空闲：
+    把最早的请求分配给 1 号电梯
+
+然后遍历所有电梯：
+    如果电梯有目标楼层，就向目标楼层移动一层
+    如果电梯已经到达目标楼层，就开门并移除这个目标
+    如果电梯没有目标楼层，就保持 idle
+```
+
+也就是说，当前版本还没有真正比较“哪部电梯更合适”，只是为了让系统先能动起来。
+
+### 当前实现涉及的函数
+
+```go
+func (s *System) Step() error
+```
+
+这是对外使用的模拟入口。每调用一次，系统推进一个离散时间片。
+
+```go
+func (s *System) assignNextRequestToFirstElevator()
+```
+
+这是临时调度策略：只把请求分配给第一部空闲电梯。
+
+```go
+func stepElevator(e *Elevator)
+```
+
+这是推进单部电梯的函数。每次最多让电梯移动一层，或者在到达目标楼层时开门。
+
+### 为什么没有请求时不返回错误
+
+之前可能会想到：如果没有 `PendingRequests`，就返回错误。
+
+但更合理的设计是：没有请求时，系统只是空闲，调用 `Step()` 什么都不做即可。这不是程序错误。
+
+所以当前 `Step()` 只有在系统本身不合法时才返回错误，例如：
+
+```go
+if len(s.Elevators) == 0 {
+	return fmt.Errorf("system has no elevators")
+}
+```
+
+### 一个例子
+
+假设：
+
+```text
+1 号电梯初始在 1 楼
+PendingRequests 里有一个请求：去 4 楼
+```
+
+连续调用：
+
+```go
+system.Step()
+system.Step()
+system.Step()
+system.Step()
+```
+
+状态变化大致是：
+
+```text
+Step 1：请求分配给 1 号电梯，电梯从 1 楼到 2 楼
+Step 2：电梯从 2 楼到 3 楼
+Step 3：电梯从 3 楼到 4 楼
+Step 4：电梯到达目标楼层，方向变 idle，开门，并移除目标楼层
+```
+
+### 当前限制
+
+- 只会把请求分配给 1 号电梯。
+- 只有当 1 号电梯没有目标楼层时，才会分配下一个请求。
+- 暂时没有最近电梯、FCFS、SCAN 等真正调度算法。
+- 暂时没有 goroutine 和 channel。
+- `DoorOpen` 会在下一次 `Step()` 里自动关闭。
+
+这些限制是有意保留的。当前目标是让同步模型可运行、可观察，后续再替换成更合理的调度算法。
+
+## 2026-05-06：编写第一个 Go 单元测试
+
+本阶段目标：不用手动打印状态，而是用测试代码自动验证“请求进入后，电梯会移动”。
+
+### 本次新增文件
+
+- `internal/elevator/system_test.go`：`System` 同步模拟逻辑的测试。
+
+### Go 测试文件的基本规则
+
+Go 的测试文件有几个约定：
+
+- 文件名必须以 `_test.go` 结尾。
+- 测试函数名通常以 `Test` 开头。
+- 测试函数参数是 `t *testing.T`。
+- 运行测试使用：
+
+  ```bash
+  go test ./...
+  ```
+
+例如：
+
+```go
+func TestStepMovesElevatorAfterRequest(t *testing.T) {
+	// test code
+}
+```
+
+### `testing.T` 是什么
+
+`testing.T` 是 Go 测试框架传进来的对象。
+
+测试里可以用它报告失败，例如：
+
+```go
+t.Fatalf("first elevator floor = %d, want 2", firstElevator.CurrentFloor)
+```
+
+`Fatalf` 的意思是：
+
+- 当前测试失败。
+- 打印错误信息。
+- 立即停止这个测试函数。
+
+### 测试 1：请求进入后电梯会移动
+
+当前测试：
+
+```go
+func TestStepMovesElevatorAfterRequest(t *testing.T) {
+	system, err := NewSystem(20, 5)
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+
+	if err := system.AddRequest(4, DirectionUp, RequestKindHall); err != nil {
+		t.Fatalf("AddRequest returned error: %v", err)
+	}
+
+	if err := system.Step(); err != nil {
+		t.Fatalf("Step returned error: %v", err)
+	}
+
+	firstElevator := system.Elevators[0]
+	if firstElevator.CurrentFloor != 2 {
+		t.Fatalf("first elevator floor = %d, want 2", firstElevator.CurrentFloor)
+	}
+}
+```
+
+它验证的过程是：
+
+```text
+创建系统：20 层，5 部电梯
+添加请求：4 楼上行
+调用 Step 一次
+检查 1 号电梯是否从 1 楼移动到 2 楼
+```
+
+因为当前临时调度策略会把请求分配给 1 号电梯，所以第一次 `Step()` 后，1 号电梯应该向目标楼层移动一层。
+
+### 测试 2：到达目标楼层后开门
+
+第二个测试把目标楼层设成 2 楼：
+
+```go
+system.AddRequest(2, DirectionUp, RequestKindHall)
+system.Step()
+system.Step()
+```
+
+状态变化应该是：
+
+```text
+初始：电梯在 1 楼
+Step 1：电梯移动到 2 楼
+Step 2：电梯发现已经到达目标楼层，方向变 idle，开门，清空目标楼层
+```
+
+所以测试会检查：
+
+- `CurrentFloor == 2`
+- `Direction == DirectionIdle`
+- `DoorOpen == true`
+- `TargetFloors` 已经清空
+
+### 为什么测试能帮助学习
+
+如果只靠手动运行程序，很容易不知道状态到底有没有变。测试代码会把预期写清楚：
+
+```text
+做了什么操作
+期望状态是什么
+实际状态是什么
+```
+
+一旦后续改坏了 `Step()`，测试会立刻失败，并指出哪个状态不符合预期。
