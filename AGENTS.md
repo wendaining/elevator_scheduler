@@ -28,7 +28,7 @@ Agent 应重点遵守：
 - 不做纯粹 Vibe Coding，不直接交付大段黑盒代码。
 - 重要设计先解释，再实现；实现后再带用户读关键文件。
 - 代码结构、命名和注释要适合初学者阅读。
-- Go 后端、HTTP API、前后端通信、goroutine、channel、调度算法是重点学习内容。
+- Go 后端、HTTP API、前后端通信、goroutine、channel、调度算法、项目的构建如 `npm` 等是**重点学习内容**。
 - 保留用户自己动手实现和修改的空间，尤其是算法核心、接口设计、状态结构体等部分。
 - 每个阶段要有明确交付物，便于用户知道当前完成了什么、学到了什么。
 - 最终报告材料要在开发过程中逐步沉淀，而不是最后临时拼接。
@@ -94,13 +94,15 @@ web/                 前端页面、样式和 JavaScript
 docs/                需求、目标、学习记录和阶段指令
 ```
 
-当前 `cmd/server/main.go` 中有教学阶段的最小 handler。后续出现业务 API，如 `GET /api/state`、`POST /api/requests` 时，应逐步把 handler 移到 `internal/api/`，让 `main.go` 只负责启动服务、创建系统和注册路由。
+`main.go` 只负责启动服务、创建系统和注册路由。
 
 ## 技术栈约定
 
 - 后端使用 Go。
 - 后端优先使用标准库，当前 HTTP 服务使用 `net/http`。
-- 前端第一版使用 HTML、CSS、JavaScript，不急于引入 Vue 或复杂构建工具。
+- 前端采用稳妥学习路线：先用原生 HTML、CSS、JavaScript 做一个极小的通信调试页，打通 `GET /api/state` 和 `POST /api/request`；闭环跑通后尽快迁移到 Vue + Vite 作为正式前端。
+- 原生前端阶段只验证通信和最小展示，不做复杂动画、组件拆分、算法切换 UI 或大量 DOM 工程。
+- Vue 阶段先保持极简：JavaScript，不用 TypeScript；单页面，不用路由；原生 CSS，不引入组件库；先从 `App.vue` 和少量组件开始。
 - 初期先实现同步、可读、可测试的模型；并发版本在同步版本稳定后再加入。
 
 ## Agent 协作方式
