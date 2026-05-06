@@ -1327,27 +1327,6 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 - `RegisterRoutes` 也改成方法，这样注册路由时 handler 自然能通过 `s` 访问 `System`。
 - `handleState` 实现了：调用 `s.System.Snapshot()` 返回 JSON。
 
-### Go 语法细节：方法（method）
-
-```go
-func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
-```
-
-括号里的 `(s *Server)` 叫 receiver。意思是：这个函数"挂在" `Server` 类型上，调用时用 `s` 访问 `Server` 实例的字段。
-
-调用方式：
-
-```go
-server := &api.Server{System: system}
-server.handleState(w, r)   // 通过实例调用
-```
-
-也可以直接用作 handler：
-
-```go
-mux.HandleFunc("/api/state", server.handleState)   // Go 自动处理 receiver
-```
-
 ### 修改后的 main.go
 
 ```go
@@ -1370,19 +1349,195 @@ func main() {
 
 现在 `main` 的职责清晰了：创建系统、创建 Server、注册路由、启动服务。具体的 API 处理逻辑全在 `api` 包里。
 
-### 本次验证
 
-已运行：
+## 2026-05-06：设计 `POST /api/request`
 
-```bash
-go build ./...
-go test ./...
-```
+本阶段目标：让前端可以通过 HTTP 请求向后端提交一个新的乘梯请求。
 
-结果通过：
+### API 设计
+
+当前接口：
 
 ```text
-?       os_sp26_proj1/cmd/server          [no test files]
-?       os_sp26_proj1/internal/api        [no test files]
-ok      os_sp26_proj1/internal/elevator   0.002s
+POST /api/request
 ```
+
+请求体使用 JSON：
+
+```json
+{
+  "floor": 5,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+字段含义：
+
+- `floor`：请求楼层。
+- `direction`：请求方向，当前可用 `"up"`、`"down"`、`"idle"`。
+- `kind`：请求来源，当前可用 `"hall"`、`"cabin"`。如果不传，后端默认当作 `"hall"`。
+
+### 为什么请求里不需要传电梯序号
+
+用户在楼层外面按按钮时，通常不知道也不应该指定哪部电梯来接。
+
+例如用户只表达：
+
+```text
+我在 5 楼，我要上行
+```
+
+至于派哪部电梯，是调度系统的职责。
+
+所以 `POST /api/request` 只提交乘客请求，不提交电梯编号。后端收到请求后，会先放入 `PendingRequests`，之后由 `Step()` 或调度算法分配给电梯。
+
+如果前端传入电梯序号，就相当于前端绕过了调度算法，这不符合本项目“电梯调度系统”的目标。
+
+### Go 如何从 HTTP 请求中读取参数
+
+在 `internal/api/handler.go` 里，`handleRequest` 使用了一个临时结构体：
+
+```go
+var request struct {
+	Floor     int                  `json:"floor"`
+	Direction elevator.Direction  `json:"direction"`
+	Kind      elevator.RequestKind `json:"kind"`
+}
+```
+
+然后用：
+
+```go
+err := json.NewDecoder(r.Body).Decode(&request)
+```
+
+读取请求体。
+
+这里的关键点：
+
+- `r.Body` 是 HTTP 请求体。
+- `json.NewDecoder(r.Body)` 创建一个 JSON 解码器。
+- `Decode(&request)` 把 JSON 里的字段填入 Go 结构体。
+- `&request` 表示传入结构体地址，这样 `Decode` 才能修改它。
+
+如果前端发送：
+
+```json
+{
+  "floor": 5,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+解码后 Go 里的值就是：
+
+```go
+request.Floor == 5
+request.Direction == elevator.DirectionUp
+request.Kind == elevator.RequestKindHall
+```
+
+### 用 `curl` 测试
+
+启动后端：
+
+```bash
+go run ./cmd/server
+```
+
+提交请求：
+
+```bash
+curl -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":5,"direction":"up","kind":"hall"}'
+```
+
+成功时返回：
+
+```json
+{"status":"accepted"}
+```
+
+然后查看状态：
+
+```bash
+curl http://localhost:8080/api/state
+```
+
+应该能看到 `pendingRequests` 里出现刚才提交的请求。后续调用 `Step()` 或定时推进逻辑后，请求会被分配给电梯。
+
+### JSON 编码的两种方式
+
+在 `handleState` 和 `handleRequest` 里，返回 JSON 的方式不同：
+
+**方式一：`w.Write(data)` — 直接写现成的字节切片**
+
+```go
+// handleState
+data, err := s.System.Snapshot()
+w.Header().Set("Content-Type", "application/json; charset=utf-8")
+w.Write(data)
+```
+
+`Snapshot()` 返回的是 `[]byte`，也就是已经编码好的 JSON 字节。所以直接用 `w.Write` 原封不动写出去即可。
+
+**方式二：`json.NewEncoder(w).Encode(v)` — 实时编码 Go 对象**
+
+```go
+// handleRequest
+response := map[string]string{"status": "accepted"}
+w.Header().Set("Content-Type", "application/json; charset=utf-8")
+json.NewEncoder(w).Encode(response)
+```
+
+`response` 是一个 Go map，不是 JSON 字节。`json.NewEncoder(w).Encode(response)` 会实时把它编码成 JSON 并写入 `w`。
+
+**区别总结：**
+
+```text
+方式一（Write）：
+  []byte 数据                                     → 直接写入 w → 发给客户端
+  适用于：数据已经是 JSON 了（例如从 Snapshot 拿到的）
+
+方式二（Encode）：
+  Go map/struct  → 内部 JSON 编码 → 写入 w → 发给客户端
+  适用于：数据是 Go 对象，需要当场转成 JSON
+```
+
+**两种方式的对比：**
+
+| | `w.Write(data)` | `json.NewEncoder(w).Encode(v)` |
+|---|---|---|
+| 输入 | `[]byte`（已经是 JSON） | 任意 Go 类型 |
+| 编码步骤 | 不需要，直接写 | 需要实时编码 |
+| 适合场景 | 数据已经提前编码好了 | 动态构造的 Go 对象 |
+| 错误处理 | `Write` 返回 `(int, error)`，简单场景可忽略 | `Encode` 返回 `error`，建议检查 |
+| 内存 | 一次性分配完整 JSON | 流式写入，但小对象差别不大 |
+
+**为什么 `handleState` 不也用 `Encode`？**
+
+因为 `Snapshot()` 已经做了 `json.MarshalIndent`，返回的就是 JSON。如果再 `Encode` 一次，会对 JSON 做二次编码，导致返回的内容变成带转义引号的字符串，而不是正常的 JSON 对象。
+
+**为什么 `handleRequest` 不先用 `json.Marshal` 再 `Write`？**
+
+可以，但多此一举：
+
+```go
+// 多余的做法：
+bytes, _ := json.Marshal(response)   // 先编成 []byte
+w.Write(bytes)                        // 再写出
+
+// 更直接的做法：
+json.NewEncoder(w).Encode(response)   // 编码 + 写出一步到位
+```
+
+`Encode` 在底层就是先序列化再写出，没必要中间多存一个 `bytes` 变量。
+
+### 当前实现的限制
+
+- `POST /api/request` 只负责添加请求，不会自动推进电梯。
+- 当前还没有 HTTP API 暴露 `Step()`。
+- 后续可以设计 `POST /api/step` 作为调试接口，或者让后端定时调用 `Step()`。

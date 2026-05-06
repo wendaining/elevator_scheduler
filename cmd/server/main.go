@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-
 	"os_sp26_proj1/internal/api"
 	"os_sp26_proj1/internal/elevator"
 )

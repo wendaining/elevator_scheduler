@@ -65,14 +65,14 @@
 
 目标：让前端能够通过 JSON 和后端交互。
 
-- [ ] 创建 `internal/api/handler.go`
-- [ ] 设计 `GET /api/state`，返回当前所有电梯状态
-- [ ] 设计 `POST /api/request`，接收楼层和方向
-- [ ] 在 `cmd/server/main.go` 中把 API handler 和 elevator system 接起来
-- [ ] 给非法楼层、非法方向返回清晰的错误响应
-- [ ] 用 `curl` 或浏览器验证 API
-- [ ] 记录请求和响应示例到 `docs/record.md`，以后可以整理进报告或 `docs/api.md`
-- [ ] 做一次小提交，例如 `feat: expose elevator state api`
+- [x] 创建 `internal/api/handler.go`
+- [x] 设计 `GET /api/state`，返回当前所有电梯状态
+- [x] 设计 `POST /api/request`，接收楼层和方向
+- [x] 在 `cmd/server/main.go` 中把 API handler 和 elevator system 接起来
+- [x] 给非法楼层、非法方向返回清晰的错误响应
+- [x] 用 `curl` 或浏览器验证 API
+- [x] 记录请求和响应示例到 `docs/record.md`，以后可以整理进报告或 `docs/api.md`
+- [x] 做一次小提交，例如 `feat: expose elevator state api`
 
 ## 5. 建立最小前端页面
 

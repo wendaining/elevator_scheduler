@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-
 	"os_sp26_proj1/internal/elevator"
 )
 
@@ -18,6 +17,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", s.handleHome)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/state", s.handleState)
+	mux.HandleFunc("/api/request", s.handleRequest)
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -61,4 +61,48 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Write(data)
+}
+
+func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		Floor     int                  `json:"floor"`
+		Direction elevator.Direction   `json:"direction"`
+		Kind      elevator.RequestKind `json:"kind"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "invalid JSON request body", http.StatusBadRequest)
+		return
+	}
+	if request.Floor < 1 || request.Floor > s.System.FloorCount {
+		http.Error(w, "floor out of range", http.StatusBadRequest)
+		return
+	}
+	if !elevator.IsValidDirection(request.Direction) {
+		http.Error(w, "invalid direction", http.StatusBadRequest)
+		return
+	}
+	if !elevator.IsValidRequestKind(request.Kind) {
+		http.Error(w, "invalid request kind", http.StatusBadRequest)
+		return
+	}
+	if err := s.System.AddRequest(request.Floor, request.Direction, request.Kind); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := map[string]string{
+		"status": "accepted",
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
 }
