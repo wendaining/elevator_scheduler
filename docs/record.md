@@ -578,3 +578,229 @@ curl http://localhost:8080/api/health
 go test ./...
 go run ./cmd/server
 ```
+
+## 2026-05-06：建立电梯核心数据模型骨架
+
+本阶段目标：开始写 `internal/elevator/model.go`，先描述“电梯系统有哪些状态”，不急着写调度算法和并发逻辑。
+
+这里采用“填空题式”的方式：Agent 先把最小可编译框架搭好，并在代码里用 `TODO(student)` 留出几个适合我自己补充或思考的位置。
+
+### 本次新增文件
+
+- `internal/elevator/model.go`：电梯系统核心数据模型。
+
+### 为什么先写 model
+
+在写调度算法之前，需要先明确系统里有哪些对象。
+
+当前最核心的对象是：
+
+```text
+Direction   电梯方向
+Request     一次乘梯请求
+Elevator    一部电梯的状态
+System      整个电梯系统的状态
+```
+
+后续的调度算法、HTTP API、前端页面，都会围绕这些数据结构展开。
+
+### 代码阅读顺序
+
+建议按这个顺序读 `internal/elevator/model.go`：
+
+1. `package elevator`
+
+   这表示当前文件属于 `elevator` 包。以后其他后端代码可以通过下面的方式使用它：
+
+   ```go
+   import "os_sp26_proj1/internal/elevator"
+   ```
+
+2. `type Direction string`
+
+   这表示定义一个新类型 `Direction`，它底层是字符串。
+
+   好处是代码会更清楚。例如：
+
+   ```go
+   DirectionUp
+   DirectionDown
+   DirectionIdle
+   ```
+
+   比到处写普通字符串 `"up"`、`"down"`、`"idle"` 更不容易写错。
+
+3. `const (...)`
+
+   `const` 用来定义常量，也就是运行时不会改变的值。
+
+   当前方向常量是：
+
+   ```go
+   const (
+   	DirectionIdle Direction = "idle"
+   	DirectionUp   Direction = "up"
+   	DirectionDown Direction = "down"
+   )
+   ```
+
+4. `type RequestKind string`
+
+   这个类型用来区分请求来源：
+
+   - `RequestKindHall`：楼层外部按钮，例如 5 楼按上行。
+   - `RequestKindCabin`：电梯内部按钮，例如进入电梯后按 12 楼。
+
+5. `type Request struct`
+
+   `Request` 表示一次乘梯请求。
+
+   当前字段：
+
+   ```go
+   type Request struct {
+   	Floor     int         `json:"floor"`
+   	Direction Direction   `json:"direction"`
+   	Kind      RequestKind `json:"kind"`
+   }
+   ```
+
+   字段含义：
+
+   - `Floor`：请求发生在哪一层，或者想去哪个楼层。
+   - `Direction`：请求方向，例如上行或下行。
+   - `Kind`：请求来源，是楼层外部请求还是电梯内部请求。
+
+6. `type Elevator struct`
+
+   `Elevator` 表示一部电梯当前的状态。
+
+   当前字段：
+
+   ```go
+   type Elevator struct {
+   	ID           int       `json:"id"`
+   	CurrentFloor int       `json:"currentFloor"`
+   	Direction    Direction `json:"direction"`
+   	DoorOpen     bool      `json:"doorOpen"`
+   	TargetFloors []int     `json:"targetFloors"`
+   }
+   ```
+
+   字段含义：
+
+   - `ID`：电梯编号。
+   - `CurrentFloor`：当前楼层。
+   - `Direction`：当前运行方向。
+   - `DoorOpen`：门是否打开。
+   - `TargetFloors`：当前目标楼层列表。
+
+7. `type System struct`
+
+   `System` 表示整个电梯调度系统。
+
+   当前字段：
+
+   ```go
+   type System struct {
+   	FloorCount      int        `json:"floorCount"`
+   	Elevators       []Elevator `json:"elevators"`
+   	PendingRequests []Request  `json:"pendingRequests"`
+   }
+   ```
+
+   字段含义：
+
+   - `FloorCount`：大楼总楼层数。
+   - `Elevators`：所有电梯。
+   - `PendingRequests`：还没有处理完成的请求。
+
+### Go 语法细节
+
+#### 为什么字段名首字母大写
+
+Go 里，名字首字母大写表示“导出”，也就是其他包可以访问。
+
+例如：
+
+```go
+CurrentFloor int
+```
+
+后续 `internal/api` 包需要读取电梯状态并返回 JSON，所以这些字段先用大写。
+
+如果写成：
+
+```go
+currentFloor int
+```
+
+这个字段只能在 `elevator` 包内部访问，其他包不能直接读。
+
+#### 什么是 `[]int`
+
+`[]int` 表示 int 切片，可以先理解成“可变长度数组”。
+
+例如：
+
+```go
+TargetFloors []int
+```
+
+表示一部电梯可能有多个目标楼层，例如：
+
+```go
+[]int{3, 8, 12}
+```
+
+#### 什么是 struct tag
+
+例如：
+
+```go
+CurrentFloor int `json:"currentFloor"`
+```
+
+反引号里的内容叫 struct tag。它告诉 JSON 编码器：把这个字段输出成 JSON 时，字段名叫 `currentFloor`。
+
+Go 字段名是：
+
+```go
+CurrentFloor
+```
+
+JSON 字段名是：
+
+```json
+"currentFloor"
+```
+
+这样前端 JavaScript 读起来更自然。
+
+### 留给我完成的填空
+
+当前 `model.go` 里有几个 `TODO(student)`：
+
+1. 思考 `Request` 是否需要记录创建时间。
+
+   这和 FCFS 有关。FCFS 是先来先服务，如果要严格比较“谁先来”，就可能需要记录请求创建时间。
+
+2. 给 `Elevator` 增加报警 / 紧急停止相关字段。
+
+   课程要求里提到了报警按钮。可以考虑加一个 `bool` 字段，例如表示“这部电梯是否处于紧急停止状态”。
+
+3. 给 `System` 增加当前调度算法名称。
+
+   后续如果支持算法切换，可以在系统状态里记录当前算法，例如 `"nearest"`、`"fcfs"`、`"scan"`。
+
+这些 TODO 现在不急着全部完成。建议先读懂已有字段，再尝试补第 2 个：给 `Elevator` 增加一个报警状态字段。
+
+### 当前还没有做的事
+
+- 还没有 `NewSystem` 初始化函数。
+- 还没有添加请求的方法。
+- 还没有 `Step()` 模拟运行。
+- 还没有调度算法。
+- 还没有并发逻辑。
+
+这一步只解决一个问题：先把电梯系统的核心状态描述出来。
