@@ -40,10 +40,10 @@ func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) er
 	if floor < 1 || floor > s.FloorCount {
 		return fmt.Errorf("floor must be between 1 and %d, got %d", s.FloorCount, floor)
 	}
-	if !isValidDirection(direction) {
+	if !IsValidDirection(direction) {
 		return fmt.Errorf("direction must be up, down, or idle, got %s", direction)
 	}
-	if !isValidRequestKind(kind) {
+	if !IsValidRequestKind(kind) {
 		return fmt.Errorf("kind must be hall or cabin, got %s", kind)
 	}
 	s.PendingRequests = append(s.PendingRequests, Request{Floor: floor, Direction: direction, Kind: kind})
