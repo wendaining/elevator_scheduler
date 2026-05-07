@@ -303,11 +303,7 @@ if err := json.NewEncoder(w).Encode(response); err != nil {
 
 API 可以先粗略理解为“前端和后端约定好的通信入口”。
 
-比如当前这个接口：
-
-```text
-GET /api/health
-```
+比如当前这个接口：`GET /api/health`
 
 它约定了几件事：
 
@@ -357,11 +353,9 @@ internal/elevator/       负责电梯系统核心逻辑
 
 可以把演进路线理解为：
 
-```text
-第一步：handler 暂时放 main.go，方便理解 HTTP 服务最小结构
-第二步：出现业务 API 后，把 handler 移到 internal/api/
-第三步：main.go 只负责组装，不负责具体业务处理
-```
+- 第一步：handler 暂时放 main.go，方便理解 HTTP 服务最小结构
+- 第二步：出现业务 API 后，把 handler 移到 internal/api/
+- 第三步：main.go 只负责组装，不负责具体业务处理
 
 ### 这一步和前后端通信有什么关系
 
@@ -391,11 +385,7 @@ Go 后端根据 URL 找到处理函数
 http://localhost:8080/api/health
 ```
 
-浏览器会自动向后端发送一个 `GET` 请求：
-
-```text
-GET /api/health
-```
+浏览器会自动向后端发送一个 `GET` 请求：`GET /api/health`
 
 这和执行下面的命令很像：
 
@@ -2224,3 +2214,1195 @@ mux.Handle("/", http.FileServer(http.Dir("web")))
 ```
 
 事实上，`HandleFunc` 可以理解为一个便利写法。它把普通函数包装成 `http.Handler`。所以两者不是完全不同的世界，而是同一个 HTTP handler 模型下的两种入口。
+
+### 7. 现在如何启动这个项目
+
+当前项目还没有 Vue、npm 或 Docker，启动方式很简单：直接运行 Go 后端。
+
+在项目根目录执行：
+
+```bash
+go run ./cmd/server
+```
+
+如果启动成功，终端会看到类似：
+
+```text
+server listening on http://localhost:8080
+```
+
+然后在浏览器打开：
+
+```text
+http://localhost:8080/
+```
+
+Go 后端会通过：
+
+```go
+mux.Handle("/", http.FileServer(http.Dir("web")))
+```
+
+把 `web/index.html`、`web/style.css`、`web/app.js` 提供给浏览器。
+
+也就是说，现在不是直接双击打开 `web/index.html`，而是通过 Go 服务访问页面。这样页面里的：
+
+```js
+fetch("/api/state")
+fetch("/api/request")
+fetch("/api/step")
+```
+
+才能正确请求到同一个后端服务。
+
+#### 用 curl 验证后端 API
+
+查看系统状态：
+
+```bash
+curl http://localhost:8080/api/state
+```
+
+提交一个楼层请求：
+
+```bash
+curl -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":5,"direction":"up","kind":"hall"}'
+```
+
+推进系统一步：
+
+```bash
+curl -X POST http://localhost:8080/api/step
+```
+
+再次查看状态：
+
+```bash
+curl http://localhost:8080/api/state
+```
+
+可以观察 1 号电梯是否逐步移动。
+
+#### 如何停止服务
+
+运行 `go run ./cmd/server` 的终端会一直被后端服务占用。
+
+停止服务时，在那个终端里按：
+
+```text
+Ctrl + C
+```
+
+#### 如果端口被占用
+
+如果看到：
+
+```text
+listen tcp :8080: bind: address already in use
+```
+
+说明 8080 端口已经有别的程序在使用，可能是之前启动的服务没有关掉。
+
+可以先检查是否已有项目服务在运行：
+
+```bash
+curl http://localhost:8080/api/health
+```
+
+如果能返回：
+
+```json
+{"status":"ok"}
+```
+
+说明已经有一个后端服务在跑。
+
+#### 每次启动前建议先跑测试
+
+```bash
+go test ./...
+```
+
+如果测试通过，再启动：
+
+```bash
+go run ./cmd/server
+```
+
+当前完整启动流程可以记成：
+
+```text
+go test ./...
+go run ./cmd/server
+浏览器打开 http://localhost:8080/
+```
+
+### 8. 为什么现在不需要给前端注册 3000 端口
+
+现在前端文件在：
+
+```text
+web/index.html
+web/style.css
+web/app.js
+```
+
+它们不是由一个独立的前端开发服务器提供的，而是由 Go 后端直接提供：
+
+```go
+mux.Handle("/", http.FileServer(http.Dir("web")))
+```
+
+所以当前只有一个服务器：
+
+```text
+Go 后端：http://localhost:8080
+```
+
+浏览器访问：
+
+```text
+http://localhost:8080/
+```
+
+时，Go 返回 `web/index.html`。
+
+然后浏览器继续请求：
+
+```text
+http://localhost:8080/style.css
+http://localhost:8080/app.js
+```
+
+Go 也会从 `web/` 目录返回对应文件。
+
+同时，前端 JavaScript 里的 API 请求也是：
+
+```js
+fetch("/api/state")
+fetch("/api/request")
+fetch("/api/step")
+```
+
+这些请求也会发到同一个地址：
+
+```text
+http://localhost:8080
+```
+
+所以当前结构是：
+
+```text
+同一个 8080 端口
+  ├── 返回前端静态文件：/、/style.css、/app.js
+  └── 返回后端 API：/api/state、/api/request、/api/step
+```
+
+因此不需要再给前端单独开一个 3000 端口。
+
+#### 那为什么很多项目有 3000 端口
+
+很多现代前端项目会使用 Vite、React、Vue 等开发服务器。比如 Vue + Vite 通常会启动：
+
+```text
+前端开发服务器：http://localhost:5173
+```
+
+React 旧项目常见：
+
+```text
+前端开发服务器：http://localhost:3000
+```
+
+这种情况下会有两个服务器：
+
+```text
+前端开发服务器：http://localhost:3000 或 5173
+Go 后端服务器：http://localhost:8080
+```
+
+前端页面从 3000/5173 加载，但 API 在 8080，所以会出现跨端口请求：
+
+```text
+浏览器页面：http://localhost:3000
+请求 API：http://localhost:8080/api/state
+```
+
+这时就需要处理代理或 CORS。
+
+#### 当前为什么先不用这种方式
+
+当前阶段只是原生 HTML/CSS/JS 通信调试页，没有 npm、Vite、Vue，也没有构建步骤。
+
+直接让 Go 同时提供页面和 API，有几个好处：
+
+- 启动命令只有一个：`go run ./cmd/server`
+- 没有跨域问题
+- 不需要 npm
+- 更容易看清楚 HTTP API 和页面之间的关系
+
+后续迁移到 Vue + Vite 后，开发阶段可能会变成：
+
+```text
+前端：npm run dev       例如 http://localhost:5173
+后端：go run ./cmd/server  http://localhost:8080
+```
+
+到那时再学习前端 dev server、代理和跨域会更合适。
+
+### 9. 什么是“独立前端开发服务器”
+
+“独立前端开发服务器”可以拆开理解：
+
+```text
+独立：它和 Go 后端不是同一个进程
+前端：它主要负责提供 HTML、CSS、JavaScript 等前端资源
+开发服务器：它主要用于开发阶段，不一定是最终部署方式
+```
+
+当前项目现在只有一个服务器：
+
+```text
+go run ./cmd/server
+```
+
+这个 Go 进程同时做两件事：
+
+```text
+1. 提供后端 API
+   /api/state
+   /api/request
+   /api/step
+
+2. 提供前端静态文件
+   /
+   /style.css
+   /app.js
+```
+
+所以当前结构是：
+
+```text
+浏览器
+  ↓
+http://localhost:8080
+  ↓
+Go 服务器
+  ├── 返回 web/index.html
+  ├── 返回 web/style.css
+  ├── 返回 web/app.js
+  └── 处理 /api/... 请求
+```
+
+这不是独立前端开发服务器，因为前端文件是由 Go 后端顺便提供的。
+
+#### 独立前端开发服务器长什么样
+
+如果后续使用 Vue + Vite，通常会启动一个前端开发服务器：
+
+```bash
+npm run dev
+```
+
+它可能输出：
+
+```text
+Local: http://localhost:5173/
+```
+
+这时会有两个进程：
+
+```text
+进程 1：Vite 前端开发服务器
+地址：http://localhost:5173
+职责：提供 Vue 页面、热更新、前端构建能力
+
+进程 2：Go 后端服务器
+地址：http://localhost:8080
+职责：提供 /api/state、/api/request 等后端 API
+```
+
+浏览器访问页面时，访问的是：
+
+```text
+http://localhost:5173
+```
+
+页面里的 API 请求再转发或发送到：
+
+```text
+http://localhost:8080/api/state
+```
+
+这就是“独立前端开发服务器”：
+
+```text
+前端页面由一个服务器提供
+后端 API 由另一个服务器提供
+```
+
+#### 为什么前端框架需要开发服务器
+
+Vue / React 项目通常不是浏览器直接读取一个简单 `app.js` 就结束了。
+
+它们会有：
+
+- `.vue` 单文件组件
+- 多个 JavaScript 模块
+- npm 依赖
+- CSS 预处理或模块化
+- 开发时热更新
+- 打包构建
+
+浏览器不能直接理解所有开发阶段的文件格式和模块组织，所以 Vite 这样的工具会在开发时帮忙处理：
+
+```text
+读取源代码
+解析模块依赖
+把浏览器能运行的 JS 发给浏览器
+代码变化时通知浏览器自动刷新
+```
+
+所以它需要启动一个开发服务器。
+
+#### 当前 Go 静态文件服务和 Vite 开发服务器的区别
+
+| | 当前 Go 静态文件服务 | Vite 前端开发服务器 |
+|---|---|---|
+| 启动命令 | `go run ./cmd/server` | `npm run dev` |
+| 常见端口 | `8080` | `5173` 或其他 |
+| 是否独立于后端 | 否，和后端同一个 Go 进程 | 是，单独一个前端进程 |
+| 主要职责 | 返回已有的 HTML/CSS/JS 文件 | 编译、转换、热更新前端源码 |
+| 是否需要 npm | 不需要 | 需要 |
+| 是否会涉及跨端口 API | 不会 | 通常会 |
+
+#### 一句话总结
+
+当前阶段：
+
+```text
+Go 一个服务器同时提供页面和 API
+```
+
+Vue/Vite 阶段：
+
+```text
+Vite 服务器提供前端页面
+Go 服务器提供后端 API
+```
+
+所以现在不需要 3000/5173 端口；等引入 Vue + Vite 后，才会出现独立前端开发服务器这个概念。
+
+### 10. Vue/Vite 能不能完全由浏览器处理，是否必须有服务器托管
+
+这个问题要区分两个阶段：
+
+```text
+开发阶段
+部署阶段
+```
+
+#### 开发阶段：需要 Vite 开发服务器
+
+Vue/Vite 项目的源码通常不是浏览器可以直接完整运行的形态。
+
+开发源码里可能有：
+
+```text
+.vue 单文件组件
+import/export 模块
+npm 依赖
+组件拆分
+开发热更新
+```
+
+浏览器不能直接理解 `.vue` 文件，也不会帮我们解析 npm 依赖、做热更新、处理开发时的模块转换。
+
+所以开发时通常要运行：
+
+```bash
+npm run dev
+```
+
+这会启动 Vite 开发服务器，例如：
+
+```text
+http://localhost:5173
+```
+
+Vite 开发服务器负责：
+
+```text
+读取 Vue 源码
+转换成浏览器能运行的 JavaScript / CSS
+处理模块依赖
+提供热更新
+把页面发给浏览器
+```
+
+所以在开发阶段，Vue/Vite 源码不能像当前 `web/app.js` 一样直接丢给浏览器处理。
+
+#### 部署阶段：可以是静态文件
+
+但 Vue/Vite 项目最终可以打包：
+
+```bash
+npm run build
+```
+
+打包后通常会得到：
+
+```text
+dist/
+  index.html
+  assets/*.js
+  assets/*.css
+```
+
+这些就是普通静态文件。
+
+部署时可以由很多东西托管：
+
+```text
+Go 后端的 http.FileServer
+Nginx
+GitHub Pages
+Vercel
+Netlify
+任意静态文件服务器
+```
+
+也就是说，部署阶段不一定需要 Vite 开发服务器。
+
+可以是：
+
+```text
+浏览器
+  ↓
+Go / Nginx 返回 dist/index.html 和 JS/CSS
+  ↓
+JS 运行后 fetch 后端 API
+```
+
+#### 更准确的理解
+
+不应该说：Vue/Vite 不能静态托管
+
+更准确的说法是：Vue 源码在开发阶段不能直接给浏览器运行，需要 Vite 转换；Vue build 之后的产物是普通静态文件，可以静态托管。
+
+对应到本项目：
+
+当前原生阶段：
+
+```text
+web/index.html
+web/app.js
+web/style.css
+  ↓
+Go 直接托管
+```
+
+未来 Vue 开发阶段：
+
+```text
+Vue 源码
+  ↓ npm run dev
+Vite 开发服务器 http://localhost:5173
+```
+
+未来最终部署阶段：
+
+```text
+Vue 源码
+  ↓ npm run build
+dist/ 静态文件
+  ↓
+Go 或 Nginx 托管
+```
+
+一句话总结：
+
+```text
+Vue/Vite 的开发源码不能直接完全由浏览器处理；
+但 build 之后的产物可以完全当作静态文件托管。
+```
+
+### 11. npm、`npm run dev`、`npm run build` 是什么
+
+这个问题本质上是在问：现代前端项目是怎么组织、运行和打包的。
+
+当前项目的原生前端很简单：
+
+```text
+web/index.html
+web/style.css
+web/app.js
+```
+
+浏览器可以直接运行这些文件，所以不需要 npm。
+
+但 Vue / React 项目通常会复杂很多，需要 npm 来管理依赖和运行脚本。
+
+#### npm 是什么
+
+npm 可以先理解为 JavaScript / Node.js 生态里的包管理工具。
+
+它主要做两类事情：
+
+```text
+1. 管理依赖
+2. 运行项目脚本
+```
+
+例如 Vue 项目可能依赖：
+
+```text
+vue
+vite
+@vitejs/plugin-vue
+```
+
+这些依赖不是浏览器自带的，需要 npm 下载到本地项目里。
+
+常见命令：
+
+```bash
+npm install
+```
+
+意思是：根据 `package.json` 里的依赖列表，把需要的包下载到 `node_modules/` 目录。
+
+#### `package.json` 是什么
+
+`package.json` 是前端项目的配置文件，可以类比 Go 项目里的 `go.mod`，但它不只记录依赖，也记录脚本命令。
+
+一个简化的 Vue + Vite `package.json` 可能长这样：
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-vue": "^5.0.0"
+  }
+}
+```
+
+这里最重要的是：
+
+```json
+"scripts": {
+  "dev": "vite",
+  "build": "vite build"
+}
+```
+
+它定义了项目里可以运行哪些命令。
+
+#### `npm run dev` 是什么
+
+当执行：
+
+```bash
+npm run dev
+```
+
+npm 会去 `package.json` 里找：
+
+```json
+"dev": "vite"
+```
+
+然后实际执行：
+
+```bash
+vite
+```
+
+也就是说：
+
+```text
+npm run dev
+  ↓
+读取 package.json 的 scripts.dev
+  ↓
+执行 vite
+  ↓
+启动 Vite 前端开发服务器
+```
+
+它通常会输出：
+
+```text
+Local: http://localhost:5173/
+```
+
+这个服务器主要用于开发阶段，提供：
+
+- Vue 文件转换
+- JavaScript 模块处理
+- npm 依赖解析
+- 热更新
+- 本地页面访问地址
+
+所以：
+
+```text
+npm run dev = 启动前端开发环境
+```
+
+它不是最终部署命令。
+
+#### `npm run build` 是什么
+
+当执行：
+
+```bash
+npm run build
+```
+
+npm 会去 `package.json` 里找：
+
+```json
+"build": "vite build"
+```
+
+然后实际执行：
+
+```bash
+vite build
+```
+
+这个命令会把 Vue/Vite 源码打包成浏览器可以直接运行的静态文件。
+
+通常输出到：
+
+```text
+dist/
+  index.html
+  assets/*.js
+  assets/*.css
+```
+
+所以：
+
+```text
+npm run build = 生成最终部署用的静态文件
+```
+
+开发时看页面用：
+
+```bash
+npm run dev
+```
+
+准备部署时用：
+
+```bash
+npm run build
+```
+
+#### `npm run preview` 是什么
+
+有些 Vite 项目还有：
+
+```bash
+npm run preview
+```
+
+它通常对应：
+
+```json
+"preview": "vite preview"
+```
+
+它的作用是：在本地预览 `npm run build` 生成的 `dist/` 结果。
+
+区别是：
+
+```text
+npm run dev
+  运行开发源码，支持热更新
+
+npm run build
+  生成 dist 静态文件
+
+npm run preview
+  本地预览 dist 静态文件
+```
+
+#### dependencies 和 devDependencies
+
+`package.json` 里通常有两类依赖：
+
+```json
+"dependencies": {}
+"devDependencies": {}
+```
+
+可以先这样理解：
+
+```text
+dependencies
+  项目运行时需要的依赖
+  例如 vue
+
+devDependencies
+  开发和构建时需要的依赖
+  例如 vite、测试工具、代码格式化工具
+```
+
+对初学阶段来说，不需要过度纠结。先知道：
+
+```bash
+npm install
+```
+
+会把这些依赖都装好。
+
+#### `node_modules` 是什么
+
+`node_modules/` 是 npm 下载依赖后存放的目录。
+
+它通常很大，而且不应该提交到 Git。
+
+前端项目通常会把它写进 `.gitignore`：
+
+```text
+node_modules/
+```
+
+别人拿到项目后，只需要运行：
+
+```bash
+npm install
+```
+
+就可以根据 `package.json` 和 `package-lock.json` 重新安装依赖。
+
+#### `package-lock.json` 是什么
+
+`package-lock.json` 用来记录依赖的精确版本。
+
+`package.json` 里可能写的是：
+
+```json
+"vite": "^5.0.0"
+```
+
+这表示允许安装某个范围内的版本。
+
+而 `package-lock.json` 会记录实际安装的精确版本，例如：
+
+```text
+vite 5.2.10
+```
+
+这样团队里不同人安装依赖时，版本更一致。
+
+#### 和 Go 项目的类比
+
+可以粗略类比：
+
+| Go | 前端 npm |
+|---|---|
+| `go.mod` | `package.json` |
+| `go.sum` | `package-lock.json` |
+| `go test ./...` | `npm test`，如果项目配置了 |
+| `go run ./cmd/server` | `npm run dev`，用于启动前端开发服务器 |
+| `go build` | `npm run build`，用于生成构建产物 |
+
+这个类比不是完全一一对应，但有助于建立直觉。
+
+`go run`
+- 临时编译
+- 立即运行
+- 不保留最终可执行文件
+
+`go build`
+- 真正生成可执行文件
+- 不自动运行
+
+#### 对本项目意味着什么
+
+当前阶段：
+
+```text
+原生 HTML/CSS/JS
+Go 直接托管 web/
+不需要 npm
+```
+
+未来 Vue 阶段：
+
+```text
+需要 package.json
+需要 npm install
+开发时运行 npm run dev
+后端仍运行 go run ./cmd/server
+```
+
+未来部署阶段：
+
+```text
+npm run build 生成 dist/
+Go 或 Nginx 托管 dist/
+```
+
+所以可以记成：
+
+```text
+npm install     安装前端依赖
+npm run dev     启动前端开发服务器
+npm run build   生成可部署的静态文件
+npm run preview 本地预览构建产物
+```
+
+当前还没进入 Vue/Vite 阶段，所以先不用 npm。等原生通信闭环理解清楚后，再引入 npm 会更容易。
+
+### 12. 什么是 Vite，什么是 Nginx
+
+这两个名字经常一起出现在前端项目里，但它们不是同一类东西。
+
+可以先粗略记成：
+
+```text
+Vite：前端开发和构建工具
+Nginx：生产环境里常用的 Web 服务器 / 反向代理服务器
+```
+
+#### Vite 是什么
+
+Vite 是一个现代前端开发工具。
+
+在 Vue 项目里，它通常负责两件事：
+
+```text
+开发阶段：启动前端开发服务器
+构建阶段：把源码打包成静态文件
+```
+
+开发阶段运行：
+
+```bash
+npm run dev
+```
+
+如果 `package.json` 里写的是：
+
+```json
+"dev": "vite"
+```
+
+那实际启动的就是 Vite 开发服务器。
+
+它会提供：
+
+- 本地访问地址，例如 `http://localhost:5173`
+- `.vue` 文件转换
+- JavaScript 模块解析
+- npm 依赖处理
+- 热更新
+
+热更新的意思是：你改了前端代码，浏览器页面可以快速更新，不需要你手动完整刷新或重新启动服务。
+
+构建阶段运行：
+
+```bash
+npm run build
+```
+
+如果 `package.json` 里写的是：
+
+```json
+"build": "vite build"
+```
+
+Vite 会把 Vue 源码打包成：
+
+```text
+dist/
+  index.html
+  assets/*.js
+  assets/*.css
+```
+
+这些 `dist/` 文件就是可以部署的静态文件。
+
+所以 Vite 不是后端业务服务器。它不负责电梯调度，不负责数据库，也不负责 Go API。它主要负责前端源码的开发体验和构建。
+
+#### Nginx 是什么
+
+Nginx 是一个高性能 Web 服务器，也经常用作反向代理服务器。
+
+它常见用途包括：
+
+```text
+1. 托管静态文件
+2. 把请求转发给后端服务
+3. 处理 HTTPS
+4. 做负载均衡
+```
+
+例如部署 Vue 项目时，可以让 Nginx 托管 Vite build 出来的 `dist/`：
+
+```text
+浏览器
+  ↓
+Nginx
+  ↓
+返回 dist/index.html、assets/*.js、assets/*.css
+```
+
+同时，Nginx 也可以把 API 请求转发给 Go 后端：
+
+```text
+浏览器请求 /api/state
+  ↓
+Nginx
+  ↓
+转发给 Go 后端 localhost:8080/api/state
+```
+
+这种“把请求转发给另一个服务”的行为叫反向代理。
+
+#### Vite 和 Nginx 的区别
+
+| | Vite | Nginx |
+|---|---|---|
+| 主要阶段 | 开发、构建 | 部署、生产运行 |
+| 常见命令 | `npm run dev`、`npm run build` | `nginx` 或系统服务 |
+| 面向对象 | 前端源码 | HTTP 请求和静态文件 |
+| 是否处理 `.vue` 文件 | 是 | 否 |
+| 是否负责热更新 | 是 | 否 |
+| 是否适合生产托管静态文件 | 一般不用 | 是 |
+| 是否可反向代理 Go API | 开发阶段可用 proxy | 生产环境常用 |
+
+可以这样理解：
+
+```text
+Vite 帮开发者把前端源码变成浏览器能运行的东西。
+Nginx 帮服务器把已经构建好的文件和请求高效地提供给用户。
+```
+
+#### 和当前项目的关系
+
+当前阶段没有 Vite，也没有 Nginx。
+
+现在是：
+
+```text
+浏览器
+  ↓
+Go 后端 localhost:8080
+  ├── 返回 web/index.html、web/app.js、web/style.css
+  └── 处理 /api/state、/api/request、/api/step
+```
+
+未来 Vue 开发阶段可能是：
+
+```text
+浏览器
+  ↓
+Vite localhost:5173
+  ↓
+Vue 页面
+  ↓
+请求 Go 后端 localhost:8080/api/...
+```
+
+未来部署阶段可能是：
+
+```text
+浏览器
+  ↓
+Nginx
+  ├── 返回 dist/ 静态文件
+  └── 把 /api/... 转发给 Go 后端
+```
+
+也可以不用 Nginx，直接让 Go 托管 `dist/`：
+
+```text
+浏览器
+  ↓
+Go 后端
+  ├── 返回 dist/ 静态文件
+  └── 处理 /api/...
+```
+
+对于课程项目来说，后者更简单；Nginx 更像是生产环境或部署加分项。
+
+一句话总结：
+
+```text
+Vite 是前端开发/构建工具；
+Nginx 是部署时常用的 Web 服务器/反向代理。
+```
+
+#### 为什么需要 Nginx，直接 Go 托管不行吗
+
+你的直觉是对的：对于当前课程项目，直接让 Go 后端托管前端静态文件和后端 API 完全可以。
+
+现在这种方式是：
+
+```text
+浏览器
+  ↓
+Go 后端
+  ├── 返回前端文件
+  └── 处理 /api/...
+```
+
+它的优点是：
+
+- 结构简单。
+- 只需要启动一个进程。
+- 没有跨域问题。
+- 不需要额外学习 Nginx 配置。
+- 很适合课程项目、原型项目、小型自用项目。
+
+所以当前阶段不需要 Nginx。
+
+那为什么很多生产环境还会用 Nginx？主要是因为生产部署会遇到更多工程问题。
+
+#### 1. Nginx 很擅长提供静态文件
+
+前端 build 后的文件通常是：
+
+```text
+dist/index.html
+dist/assets/*.js
+dist/assets/*.css
+dist/assets/*.png
+```
+
+Nginx 提供这些静态文件非常成熟、高效，而且配置缓存策略很方便。
+
+例如可以让浏览器长期缓存带 hash 的 JS/CSS 文件：
+
+```text
+assets/app.8f3a2.js
+assets/style.91bc.css
+```
+
+这样用户第二次访问时，很多文件不需要重新下载。
+
+Go 当然也能做静态文件服务，但 Nginx 在这类通用 Web 服务能力上更专业。
+
+#### 2. Nginx 常用来处理 HTTPS
+
+正式网站通常需要 HTTPS：
+
+```text
+https://example.com
+```
+
+Nginx 可以负责：
+
+- TLS 证书配置
+- HTTPS 握手
+- HTTP 自动跳转 HTTPS
+- 证书续期配合
+
+这样 Go 后端可以只专注业务逻辑，不直接处理 HTTPS 细节。
+
+#### 3. Nginx 可以做反向代理
+
+生产环境里常见结构是：
+
+```text
+浏览器
+  ↓
+Nginx
+  ├── /          返回前端静态文件
+  └── /api/...   转发给 Go 后端
+```
+
+Go 后端可能只监听本机端口：
+
+```text
+localhost:8080
+```
+
+外部用户看不到 Go 端口，只访问：
+
+```text
+https://example.com
+```
+
+Nginx 决定哪些请求返回前端文件，哪些请求转发给 Go。
+
+#### 4. Nginx 可以统一管理多个服务
+
+如果以后一个服务器上有多个服务：
+
+```text
+/api/...       Go 后端
+/admin/...     管理后台
+/static/...    静态资源
+/docs/...      文档站点
+```
+
+Nginx 可以作为统一入口，把不同路径分发给不同服务。
+
+这时让每个后端程序都直接暴露给外部就会比较混乱。
+
+#### 5. Nginx 可以做限流、压缩、日志等通用工作
+
+Nginx 还常用于：
+
+- 请求日志
+- gzip / brotli 压缩
+- 请求大小限制
+- 简单限流
+- 负载均衡
+- 健康检查
+
+这些都是通用 Web 服务能力，不一定应该写进业务后端里。
+
+#### 什么时候不用 Nginx
+
+以下场景完全可以不用 Nginx：
+
+```text
+课程项目
+本地开发
+小型 demo
+单机部署
+Go 后端本身已经能满足静态文件和 API 服务
+```
+
+比如本项目当前阶段：
+
+```text
+go run ./cmd/server
+浏览器打开 http://localhost:8080/
+```
+
+这就足够了。
+
+#### 什么时候考虑 Nginx
+
+以下场景可以考虑 Nginx：
+
+```text
+要部署到公网
+要配置 HTTPS
+要高效托管前端 build 产物
+要把多个后端服务统一到一个域名
+要做反向代理、缓存、压缩、限流
+```
+
+所以结论是：Go 后端托管一切没有问题，尤其适合当前项目；Nginx 不是必须的，而是生产部署中常见的工程工具。
+
+> wdn注：这里其实没太看懂... 感觉是没有实际操作导致的，什么反向代理都看不懂，之后系统学习一下吧，先得补网络的知识。
