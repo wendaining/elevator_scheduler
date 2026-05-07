@@ -3,10 +3,11 @@ package elevator
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 )
 
 // NewSystem 是 System 的构造函数，接收楼层数和电梯数量，返回初始化后的系统。
-// 如果参数不合法（小于 1），返回错误而不是静默修正，让调用方知道传入了无效参数。
+// 如果参数不合法（小于 1），返回错误。
 func NewSystem(floors int, elevatorCount int) (*System, error) {
 	if floors < 1 {
 		return nil, fmt.Errorf("floors must be at least 1, got %d", floors)
@@ -27,10 +28,14 @@ func NewSystem(floors int, elevatorCount int) (*System, error) {
 		}
 	}
 
+	scheduler := FirstAvailableScheduler{}
+
 	return &System{
 		FloorCount:      floors,
 		Elevators:       elevators,
 		PendingRequests: []Request{},
+		SchedulerName:   scheduler.Name(),
+		scheduler:       scheduler,
 	}, nil
 }
 
@@ -50,6 +55,18 @@ func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) er
 	return nil
 }
 
+// SetScheduler 根据名称切换调度算法。
+func (s *System) SetScheduler(name string) error {
+	scheduler, err := NewScheduler(name)
+	if err != nil {
+		return err
+	}
+
+	s.scheduler = scheduler
+	s.SchedulerName = scheduler.Name()
+	return nil
+}
+
 // Snapshot 返回系统当前状态的 JSON 快照，带缩进格式，便于调试和 HTTP API 使用。
 func (s *System) Snapshot() ([]byte, error) {
 	return json.MarshalIndent(s, "", "  ")
@@ -62,32 +79,19 @@ func (s *System) Step() error {
 		return fmt.Errorf("system has no elevators")
 	}
 
-	s.assignNextRequestToFirstElevator()
+	if s.scheduler == nil {
+		return fmt.Errorf("No valid scheduler.")
+	}
 
+	assigned := s.scheduler.Assign(s)
+	if assigned {
+		log.Println("assigned one request")
+	}
 	for i := range s.Elevators {
 		stepElevator(&s.Elevators[i])
 	}
 
 	return nil
-}
-
-// assignNextRequestToFirstElevator 是临时调度策略：取出最早的待处理请求，
-// 分配给 1 号电梯。只有当 1 号电梯空闲（无目标楼层、未紧急停止）时才会分配。
-func (s *System) assignNextRequestToFirstElevator() {
-	if len(s.PendingRequests) == 0 {
-		return
-	}
-
-	firstElevator := &s.Elevators[0]
-	// 1 号电梯紧急停止或正在执行其他任务，暂不分配
-	if firstElevator.EmergencyStop || len(firstElevator.TargetFloors) > 0 {
-		return
-	}
-
-	// 取出最早的请求，分配给 1 号电梯
-	request := s.PendingRequests[0]
-	s.PendingRequests = s.PendingRequests[1:]
-	firstElevator.TargetFloors = append(firstElevator.TargetFloors, request.Floor)
 }
 
 // stepElevator 推进单部电梯一个时间片：每次最多向目标楼层移动一层，

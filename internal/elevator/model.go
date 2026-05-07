@@ -65,6 +65,9 @@ type System struct {
 	// PendingRequests 存储尚未完全服务的请求。
 	PendingRequests []Request `json:"pendingRequests"`
 
-	// TODO: 项目需要多种调度算法。后续添加一个字段来记录当前调度器名称，
-	// 如 "nearest" 或 "scan"。
+	// SchedulerName 会暴露给 API 和前端，方便观察当前调度策略。
+	SchedulerName string `json:"schedulerName"`
+
+	// scheduler 是真正执行调度逻辑的对象。字段名小写，所以 JSON 不会暴露它。
+	scheduler Scheduler
 }
