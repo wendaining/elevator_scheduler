@@ -21,3 +21,16 @@ func floorDistance(a int, b int) int {
 	}
 	return b - a
 }
+
+func containsFloor(floors []int, target int) bool {
+	for _, floor := range floors {
+		if floor == target {
+			return true
+		}
+	}
+	return false
+}
+
+func removeRequestAt(requests []Request, index int) []Request {
+	return append(requests[:index], requests[index+1:]...)
+}
