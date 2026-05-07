@@ -143,36 +143,31 @@
 - [x] 修改 `Snapshot()` 和 API 返回，确保可以观察所有请求及其状态
 - [x] 写测试验证请求创建、分配、完成时状态和 tick 正确变化
 - [x] 在 `docs/record.md` 记录：为什么请求不能在分配时从系统里消失，为什么本项目使用离散 tick，而不是 `time.Time`
-- [ ] 做一次小提交，例如 `feat: track requests by status`
+- [x] 做一次小提交，例如 `feat: track requests by status`
 
-### 6.5.3 楼层模型
+### 6.5.3 暂不做楼层人数模型
 
-目标：让楼层成为系统中的对象，而不是只有一个楼层编号。
+目标：明确当前核心模型不记录楼层等待人数。现实电梯系统通常只知道某层有人按了上行 / 下行按钮，也就是产生了一个 hall request；系统并不知道这个楼层真实有多少人等电梯。
 
-- [ ] 定义 `Floor` 结构体
-- [ ] 在 `System` 中增加 `Floors []Floor`
-- [ ] 每个 `Floor` 至少记录楼层编号、等待上行人数、等待下行人数
-- [ ] 设计 hall 请求和楼层人数的关系：楼层触发请求，请求记录方向和人数变化
-- [ ] 明确当电梯到达楼层并完成接人时，如何减少对应楼层等待人数
-- [ ] 暂时不让前端输入人数也可以，但后端模型要能表达人数
-- [ ] 写测试验证创建 hall 请求会影响对应楼层等待人数
-- [ ] 在 `docs/record.md` 记录：为什么楼层也需要建模
-- [ ] 做一次小提交，例如 `feat: model floor waiting passengers`
+- [x] 不在当前核心模型中定义 `Floor` 人数状态
+- [x] 不在 `System` 中增加 `Floors []Floor`
+- [x] 不记录每层上行 / 下行等待人数
+- [x] hall request 只表示“某层某方向按钮被按下”，不假设有多少人
+- [x] 到站时只完成对应 request，不更新楼层人数
+- [x] 在 `docs/record.md` 记录：为什么现实电梯系统通常无法知道楼层等待人数
+- [x] 做一次小提交，例如 `docs: defer passenger count modeling`
 
-### 6.5.4 电梯负载和停靠计划
+### 6.5.4 停靠计划 StopPlan
 
-目标：让电梯能表达乘客数量、容量限制和更真实的停靠计划。
+目标：保留核心重构：用 `StopPlan` 替代 `TargetFloors []int`，让电梯能表达“为什么要在某层停”，但暂不建模乘客人数、容量和真实上下客数量。
 
-- [ ] 给 `Elevator` 增加 `Capacity int`
-- [ ] 给 `Elevator` 增加 `PassengerCount int`
-- [ ] 根据需要增加 `DoorRemainingTicks` 或类似字段，用于表示开门 / 乘客上下电梯耗时
 - [ ] 定义 `StopPlan` 结构体，用于替代 `TargetFloors []int`
-- [ ] `StopPlan` 至少包含 `Floor`、`RequestIDs`、是否接上行乘客、是否接下行乘客、是否有乘客下电梯等信息
+- [ ] `StopPlan` 至少包含 `Floor`、`RequestIDs`、停靠原因或停靠方向
+- [ ] `StopPlan` 能区分 hall up、hall down、cabin target，避免同楼层不同方向请求被错误合并
 - [ ] 把 `Elevator.TargetFloors` 重构为 `Elevator.Stops []StopPlan`
 - [ ] 修改电梯移动逻辑：根据 `Stops` 决定下一站
-- [ ] 修改到站逻辑：开门、处理上下客、更新楼层人数、更新电梯人数、完成相关请求
+- [ ] 修改到站逻辑：开门、完成对应请求、从 `Stops` 中移除已完成停靠
 - [ ] 写测试验证同一楼层上行和下行请求不会被错误合并
-- [ ] 写测试验证电梯容量限制会影响接人
 - [ ] 在 `docs/record.md` 记录：`StopPlan` 相比 `[]int` 解决了哪些问题
 - [ ] 做一次小提交，例如 `feat: replace target floors with stop plans`
 
@@ -183,7 +178,7 @@
 - [ ] 设计调度评分结构，例如 `AssignmentScore` 或 `AssignmentCandidate`
 - [ ] 预留 cost 计算接口，例如 `EstimateCost(system *System, elevator Elevator, request Request) int`
 - [ ] 让 SCAN/LOOK 调度器通过统一入口选择候选电梯
-- [ ] cost 函数先返回可解释的基础分数，但结构上要能加入等待时间补偿、掉头惩罚、负载惩罚
+- [ ] cost 函数先返回可解释的基础分数，但结构上要能加入等待时间补偿、掉头惩罚、已有停靠惩罚
 - [ ] 写测试验证调度器能基于 cost 选择候选电梯
 - [ ] 在 `docs/record.md` 记录：cost 函数当前预留了哪些维度，后续如何增强
 - [ ] 做一次小提交，例如 `feat: add scheduler cost interface`
@@ -195,9 +190,9 @@
 - [ ] 重构 FCFS：从 `Requests` 中选择最早的 pending 请求
 - [ ] 重构 Nearest：基于 pending 请求和电梯当前位置选择候选电梯
 - [ ] 重构 SCAN/LOOK：基于 `Stops`、`ScanDirection` 和请求方向追加或分配停靠计划
-- [ ] 重构 `POST /api/request`：创建请求，并更新楼层等待人数
-- [ ] 重构 `GET /api/state`：返回 tick、floors、requests、elevators、schedulerName
-- [ ] 保持 API 错误处理清晰，例如非法楼层、非法方向、人数不合法
+- [ ] 重构 `POST /api/request`：创建请求，不引入人数参数
+- [ ] 重构 `GET /api/state`：返回 tick、requests、elevators、schedulerName
+- [ ] 保持 API 错误处理清晰，例如非法楼层、非法方向、非法请求类型
 - [ ] 用 `curl` 验证新请求模型能从 API 进入系统
 - [ ] 跑通 `go test ./...`
 - [ ] 在 `docs/record.md` 记录新状态 JSON 的关键字段
@@ -210,9 +205,9 @@
 ```text
 commit 1: tick 时钟
 commit 2: RequestStatus / Requests / 删除 PendingRequests
-commit 3: Floor 模型和楼层人数
-commit 4: Elevator 负载字段和 StopPlan
-commit 5: Step 到站和上下客逻辑
+commit 3: 明确跳过楼层人数模型，整理文档和相关 TODO
+commit 4: StopPlan 替代 TargetFloors
+commit 5: Step 到站、开门和完成请求逻辑
 commit 6: scheduler cost 接口
 commit 7: FCFS / Nearest / SCAN 适配新模型
 commit 8: API 适配新状态
@@ -231,7 +226,7 @@ commit 9: 测试和文档补充
 
 目标：满足课程中“每部电梯作为独立执行单元”的要求。
 
-- [ ] 在 tick、Requests、Floors、Stops、基础调度器都稳定后，再开始加入 goroutine
+- [ ] 在 tick、Requests、Stops、基础调度器都稳定后，再开始加入 goroutine
 - [ ] 设计每部电梯的运行循环
 - [ ] 使用 channel 传递请求或控制信号
 - [ ] 使用 mutex 或单线程事件循环保护共享状态，避免数据竞争
@@ -293,6 +288,42 @@ commit 9: 测试和文档补充
 - [ ] 补充 Docker 打包，如果时间允许
 - [ ] 检查 README 是否能让别人从零运行项目
 - [ ] 做最终提交，例如 `docs: prepare project report materials`
+
+## 11. 后续扩展 TODO
+
+这些内容不进入当前核心路线。原因是它们要么现实系统无法直接观测，要么会显著增加模型复杂度。等请求模型、StopPlan、调度算法、并发模型、API 和前端切换都稳定之后，再考虑。
+
+### 11.1 楼层人数模型
+
+现实中的电梯系统通常只知道某层有人按了上行 / 下行按钮，不知道这个楼层真实有多少人在等。因此当前核心模型只保留 hall request，不记录楼层等待人数。
+
+- [ ] 研究是否需要把楼层建模为 `Floor`
+- [ ] 如果只是展示楼层按钮和请求灯，可以不需要 `Floor` 结构体
+- [ ] 如果课程展示需要模拟人数，再考虑 `Floor.UpWaitingCount` / `Floor.DownWaitingCount`
+- [ ] 明确人数是“模拟生成的数据”，不是电梯系统真实可观测数据
+- [ ] 设计人数变化规则：请求生成、上客、取消、完成
+- [ ] 给楼层人数模型单独写测试
+
+### 11.2 电梯负载模型
+
+现实电梯可以通过重量传感器估计负载，但本项目当前请求模型不知道每个请求对应几个人。因此容量和人数先不进入核心调度。
+
+- [ ] 给 `System` 或 `Elevator` 增加容量参数，例如 `Capacity`
+- [ ] 给 `Elevator` 增加当前人数或负载估计，例如 `PassengerCount`
+- [ ] 设计单个 request 对应多少人，是前端输入、随机生成，还是固定模拟值
+- [ ] 设计满载时是否跳过 hall request
+- [ ] 设计负载对 cost 函数的影响
+- [ ] 给满载、接人、下人场景写测试
+
+### 11.3 上下客耗时模型
+
+当前核心模型只需要开门 / 关门和完成请求。真实上下客耗时依赖人数，但人数暂不建模，所以这部分也后置。
+
+- [ ] 区分开门耗时、保持开门耗时、关门耗时
+- [ ] 如果引入人数，再加入每人上车 / 下车耗时
+- [ ] 用 `DoorRemainingTicks` 或类似字段表达门控状态
+- [ ] 保证 `Step()` 中门控时间不会和移动时间混在一起
+- [ ] 给到站、开门、保持、关门、继续移动写测试
 
 ## 每个阶段都要坚持的习惯
 
