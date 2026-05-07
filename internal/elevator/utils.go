@@ -22,6 +22,7 @@ func floorDistance(a int, b int) int {
 	return b - a
 }
 
+// 用于判断目标楼层数组中有无目标楼层
 func containsFloor(floors []int, target int) bool {
 	for _, floor := range floors {
 		if floor == target {
@@ -31,6 +32,8 @@ func containsFloor(floors []int, target int) bool {
 	return false
 }
 
+// 去除 index 处的 request
 func removeRequestAt(requests []Request, index int) []Request {
+	// 注意 go 里面的 append 返回的也是 slice
 	return append(requests[:index], requests[index+1:]...)
 }

@@ -87,8 +87,9 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := map[string]string{
-		"status": "accepted",
+	response := map[string]any{
+		"status":      "accepted",
+		"currentTick": s.System.CurrentTick,
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

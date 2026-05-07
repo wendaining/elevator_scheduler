@@ -32,11 +32,15 @@ func NewSystem(floors int, elevatorCount int) (*System, error) {
 	scheduler := FirstAvailableScheduler{}
 
 	return &System{
-		FloorCount:      floors,
-		Elevators:       elevators,
-		PendingRequests: []Request{},
-		SchedulerName:   scheduler.Name(),
-		scheduler:       scheduler,
+		FloorCount:       floors,
+		CurrentTick:      0,
+		TicksPerFloor:    5,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		Elevators:        elevators,
+		PendingRequests:  []Request{},
+		SchedulerName:    scheduler.Name(),
+		scheduler:        scheduler,
 	}, nil
 }
 
@@ -52,7 +56,14 @@ func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) er
 	if !IsValidRequestKind(kind) {
 		return fmt.Errorf("kind must be hall or cabin, got %s", kind)
 	}
-	s.PendingRequests = append(s.PendingRequests, Request{Floor: floor, Direction: direction, Kind: kind})
+	s.PendingRequests = append(s.PendingRequests, Request{
+		Floor:         floor,
+		Direction:     direction,
+		Kind:          kind,
+		CreatedTick:   s.CurrentTick,
+		AssignedTick:  0,
+		CompletedTick: 0,
+	})
 	return nil
 }
 
@@ -83,6 +94,8 @@ func (s *System) Step() error {
 	if s.scheduler == nil {
 		return fmt.Errorf("No valid scheduler.")
 	}
+
+	s.CurrentTick++
 
 	assigned := s.scheduler.Assign(s)
 	if assigned {

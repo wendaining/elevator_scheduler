@@ -38,7 +38,11 @@ type Request struct {
 	Direction Direction   `json:"direction"`
 	Kind      RequestKind `json:"kind"`
 
-	// TODO: 考虑一下请求是否应该记录创建时间。如果需要，应该使用什么类型？
+	// CreatedTick 记录请求是在第几个系统时间片创建的。
+	// 后续重构为完整 Requests 模型后，会继续使用 tick 记录分配和完成时间。
+	CreatedTick   int `json:"createdTick"`
+	AssignedTick  int `json:"assignedTick"`
+	CompletedTick int `json:"completedTick"`
 }
 
 // Elevator 表示一部电梯轿厢。
@@ -61,6 +65,16 @@ type Elevator struct {
 // 在第一版模型中，此结构体仅描述状态。它尚未包含 goroutine、channel 或调度算法。
 type System struct {
 	FloorCount int `json:"floorCount"`
+
+	// CurrentTick 是整个模拟系统的全局离散时钟。
+	// 每调用一次 Step()，系统向前推进一个时间片。
+	CurrentTick int `json:"currentTick"`
+
+	// 下面三个字段是后续更真实时间模型的配置预留。
+	// 当前 Step() 仍然是“一次移动一层”的简单模型，后续会改成跨楼层和开门都消耗多个 tick。
+	TicksPerFloor    int `json:"ticksPerFloor"`
+	DoorBaseTicks    int `json:"doorBaseTicks"`
+	TickPerPassenger int `json:"tickPerPassenger"`
 
 	// Elevators 存储大楼中的所有电梯轿厢。
 	Elevators []Elevator `json:"elevators"`

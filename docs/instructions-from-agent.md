@@ -120,14 +120,12 @@
 
 目标：用离散时间片作为整个模拟系统的统一时间单位，而不是使用真实时间 `time.Time`。
 
-- [ ] 在 `System` 中增加全局时间片字段，例如 `CurrentTick int`
-- [ ] 约定系统启动时 `CurrentTick = 0`
-- [ ] 每调用一次 `Step()`，`CurrentTick += 1`
-- [ ] 所有请求时间都使用 tick 记录，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
-- [ ] 预留可配置时间参数，例如跨一层需要多少 tick、开门基础时间、每上 / 下一名乘客额外消耗多少 tick
-- [ ] 在 `Snapshot()` / `GET /api/state` 中暴露当前 tick，方便前端同步显示
-- [ ] 写测试验证连续调用 `Step()` 会推动 `CurrentTick` 增长
-- [ ] 在 `docs/record.md` 记录：为什么本项目使用离散 tick，而不是 `time.Time`
+- [x] 在 `System` 中增加全局时间片字段，例如 `CurrentTick int`
+- [x] 约定系统启动时 `CurrentTick = 0`
+- [x] 每调用一次 `Step()`，`CurrentTick += 1`
+- [x] 所有请求时间都使用 tick 记录，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
+- [x] 预留可配置时间参数，例如跨一层需要多少 tick、开门基础时间、每上 / 下一名乘客额外消耗多少 tick
+- [x] 在 `Snapshot()` / `GET /api/state` 中暴露当前 tick，方便前端同步显示
 - [ ] 做一次小提交，例如 `feat: add simulation tick clock`
 
 ### 6.5.2 请求模型重构
