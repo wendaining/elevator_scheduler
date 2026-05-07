@@ -40,8 +40,7 @@ func NewSystem(
 			Direction:          DirectionIdle,
 			ScanDirection:      DirectionUp,
 			DoorOpen:           false,
-			TargetFloors:       []int{},
-			TargetRequestIDs:   []int64{},
+			Stops:              []StopPlan{},
 			MoveRemainingTicks: 0,
 			DoorRemainingTicks: 0,
 			EmergencyStop:      false,
@@ -156,24 +155,24 @@ func stepElevator(s *System, e *Elevator) {
 		return
 	}
 
-	// 没有目标楼层，保持空闲
-	if len(e.TargetFloors) == 0 {
+	// 没有停靠计划，保持空闲
+	if len(e.Stops) == 0 {
 		e.Direction = DirectionIdle
 		return
 	}
 
-	targetFloor := e.TargetFloors[0]
+	nextStop := e.Stops[0]
+	targetFloor := nextStop.Floor
 
 	// 当前已经在目标楼层：本 tick 用于开门、完成请求、移除目标。
 	if e.CurrentFloor == targetFloor {
 		e.Direction = DirectionIdle
 		e.DoorOpen = true
 		e.DoorRemainingTicks = s.DoorBaseTicks
-		if len(e.TargetRequestIDs) > 0 {
-			s.completeRequest(e.TargetRequestIDs[0], s.CurrentTick)
-			e.TargetRequestIDs = e.TargetRequestIDs[1:]
+		for _, requestID := range nextStop.RequestIDs {
+			s.completeRequest(requestID, s.CurrentTick)
 		}
-		e.TargetFloors = e.TargetFloors[1:]
+		e.Stops = e.Stops[1:]
 		if e.DoorRemainingTicks == 0 {
 			e.DoorOpen = false
 		}
@@ -205,7 +204,7 @@ func moveOneTick(e *Elevator, floorDelta int, ticksPerFloor int) {
 
 // 给 System 添加一些辅助方法，方便调度器调用：
 
-// 用于将某个请求分配给某部电梯，更新请求状态并将目标楼层添加到电梯的任务列表中。
+// 用于将某个请求分配给某部电梯，更新请求状态并将停靠计划添加到电梯任务列表中。
 func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
 	request := &s.Requests[requestIndex]
 	elevator := &s.Elevators[elevatorIndex]
@@ -214,8 +213,7 @@ func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
 	request.AssignedTick = s.CurrentTick
 	request.AssignedElevatorID = elevator.ID
 
-	elevator.TargetFloors = append(elevator.TargetFloors, request.Floor)
-	elevator.TargetRequestIDs = append(elevator.TargetRequestIDs, request.ID)
+	addStopPlan(elevator, stopPlanFromRequest(*request))
 }
 
 // 用于将某个请求标记为完成状态，并记录完成的时间片。

@@ -5,7 +5,7 @@ package elevator
 // 目标行为：
 //   - 取最早的 pending request。
 //   - 在所有空闲且未紧急停止的电梯中，找到距离请求楼层最近的电梯。
-//   - 把请求楼层加入那部电梯的 TargetFloors。
+//   - 把请求转换为 StopPlan 加入那部电梯。
 type NearestIdleScheduler struct{}
 
 func (NearestIdleScheduler) Name() string {
@@ -34,8 +34,8 @@ func (NearestIdleScheduler) Assign(s *System) bool {
 			bestDistance = distance
 		}
 		if distance == bestDistance {
-			numTargetNow := len(s.Elevators[bestIndex].TargetFloors)
-			numTargetCandidate := len(s.Elevators[i].TargetFloors)
+			numTargetNow := len(s.Elevators[bestIndex].Stops)
+			numTargetCandidate := len(s.Elevators[i].Stops)
 			if numTargetNow >= numTargetCandidate {
 				if numTargetNow == numTargetCandidate {
 					bestIndex = min(i, bestIndex) // 目标数量相同时选择编号小的

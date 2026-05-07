@@ -161,15 +161,15 @@
 
 目标：保留核心重构：用 `StopPlan` 替代 `TargetFloors []int`，让电梯能表达“为什么要在某层停”，但暂不建模乘客人数、容量和真实上下客数量。
 
-- [ ] 定义 `StopPlan` 结构体，用于替代 `TargetFloors []int`
-- [ ] `StopPlan` 至少包含 `Floor`、`RequestIDs`、停靠原因或停靠方向
-- [ ] `StopPlan` 能区分 hall up、hall down、cabin target，避免同楼层不同方向请求被错误合并
-- [ ] 把 `Elevator.TargetFloors` 重构为 `Elevator.Stops []StopPlan`
-- [ ] 修改电梯移动逻辑：根据 `Stops` 决定下一站
-- [ ] 修改到站逻辑：开门、完成对应请求、从 `Stops` 中移除已完成停靠
-- [ ] 写测试验证同一楼层上行和下行请求不会被错误合并
-- [ ] 在 `docs/record.md` 记录：`StopPlan` 相比 `[]int` 解决了哪些问题
-- [ ] 做一次小提交，例如 `feat: replace target floors with stop plans`
+- [x] 定义 `StopPlan` 结构体，用于替代 `TargetFloors []int`
+- [x] `StopPlan` 至少包含 `Floor`、`RequestIDs`、停靠原因或停靠方向
+- [x] `StopPlan` 能区分 hall up、hall down、cabin target，避免同楼层不同方向请求被错误合并
+- [x] 把 `Elevator.TargetFloors` 重构为 `Elevator.Stops []StopPlan`
+- [x] 修改电梯移动逻辑：根据 `Stops` 决定下一站
+- [x] 修改到站逻辑：开门、完成对应请求、从 `Stops` 中移除已完成停靠
+- [x] 写测试验证同一楼层上行和下行请求不会被错误合并
+- [x] 在 `docs/record.md` 记录：`StopPlan` 相比 `[]int` 解决了哪些问题
+- [x] 做一次小提交，例如 `feat: replace target floors with stop plans`
 
 ### 6.5.5 调度接口预留 cost 函数
 

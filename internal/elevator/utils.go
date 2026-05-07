@@ -12,7 +12,7 @@ func IsValidRequestKind(kind RequestKind) bool {
 }
 
 func canAcceptRequest(e Elevator) bool {
-	return !e.EmergencyStop && len(e.TargetFloors) == 0
+	return !e.EmergencyStop && len(e.Stops) == 0
 }
 
 // 找到所有 pending 请求中最早的一个，返回它在 s.Requests 中的下标。如果没有 pending 请求，返回 -1。
@@ -47,18 +47,36 @@ func floorDistance(a int, b int) int {
 	return b - a
 }
 
-// 用于判断目标楼层数组中有无目标楼层
-func containsFloor(floors []int, target int) bool {
-	for _, floor := range floors {
-		if floor == target {
-			return true
-		}
+func stopPlanFromRequest(request Request) StopPlan {
+	reason := StopReasonCabin
+	if request.Kind == RequestKindHall && request.Direction == DirectionUp {
+		reason = StopReasonHallUp
 	}
-	return false
+	if request.Kind == RequestKindHall && request.Direction == DirectionDown {
+		reason = StopReasonHallDown
+	}
+
+	return StopPlan{
+		Floor:      request.Floor,
+		Reason:     reason,
+		Direction:  request.Direction,
+		RequestIDs: []int64{request.ID},
+	}
 }
 
-// 去除 index 处的 request
-func removeRequestAt(requests []Request, index int) []Request {
-	// 注意 go 里面的 append 返回的也是 slice
-	return append(requests[:index], requests[index+1:]...)
+func addStopPlan(e *Elevator, stop StopPlan) {
+	for i := range e.Stops {
+		if !isSameStop(e.Stops[i], stop) {
+			continue
+		}
+		e.Stops[i].RequestIDs = append(e.Stops[i].RequestIDs, stop.RequestIDs...)
+		return
+	}
+	e.Stops = append(e.Stops, stop)
+}
+
+func isSameStop(a StopPlan, b StopPlan) bool {
+	return a.Floor == b.Floor &&
+		a.Reason == b.Reason &&
+		a.Direction == b.Direction
 }

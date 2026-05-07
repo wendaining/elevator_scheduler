@@ -35,6 +35,16 @@ const (
 	RequestKindCabin RequestKind = "cabin"
 )
 
+// StopReason 描述电梯为什么要在某层停靠。
+// 同一楼层的 hall up、hall down、cabin target 不能简单合并成一个 int。
+type StopReason string
+
+const (
+	StopReasonHallUp   StopReason = "hall_up"
+	StopReasonHallDown StopReason = "hall_down"
+	StopReasonCabin    StopReason = "cabin"
+)
+
 // Request 表示一个乘客请求。
 //
 // Go 语法说明：
@@ -56,6 +66,19 @@ type Request struct {
 	AssignedElevatorID int `json:"assignedElevatorId"`
 }
 
+// StopPlan 表示一部电梯的一次停靠计划。
+//
+// Floor 说明停在哪层。
+// Reason 说明为什么停，例如接上行 hall 请求、接下行 hall 请求、或响应 cabin 目标。
+// Direction 保留请求方向，方便调度器判断顺路关系。
+// RequestIDs 记录这个停靠会完成哪些请求。
+type StopPlan struct {
+	Floor      int        `json:"floor"`
+	Reason     StopReason `json:"reason"`
+	Direction  Direction  `json:"direction"`
+	RequestIDs []int64    `json:"requestIds"`
+}
+
 // Elevator 表示一部电梯轿厢。
 type Elevator struct {
 	ID           int       `json:"id"`
@@ -66,11 +89,8 @@ type Elevator struct {
 	// ScanDirection 表示空闲接单时优先沿哪个方向寻找请求。
 	ScanDirection Direction `json:"scanDirection"`
 	DoorOpen      bool      `json:"doorOpen"`
-	// TargetFloors 是此电梯当前的简单任务列表。
-	TargetFloors []int `json:"targetFloors"`
-	// TargetRequestIDs 临时和 TargetFloors 按下标对齐，用来在到站时完成对应请求。
-	// 后续 6.5.4 会用 StopPlan 替代这两个平行切片。
-	TargetRequestIDs []int64 `json:"targetRequestIds"`
+	// Stops 是此电梯当前的停靠计划列表。
+	Stops []StopPlan `json:"stops"`
 	// MoveRemainingTicks 表示当前跨越相邻两层还剩多少 tick。
 	// 它让 TicksPerFloor 真正参与模拟，而不是每次 Step 都移动一整层。
 	MoveRemainingTicks int `json:"moveRemainingTicks"`

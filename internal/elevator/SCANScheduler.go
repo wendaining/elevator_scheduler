@@ -12,7 +12,7 @@ package elevator
 //   - ScanDirection：SCAN 算法的长期扫描方向，用于决定下一次接单时先看哪边。
 //
 // 当前实现支持顺路请求追加：
-//   - 运行中的电梯如果能顺路服务某个请求，就把该楼层插入 TargetFloors。
+//   - 运行中的电梯如果能顺路服务某个请求，就把该请求转换为 StopPlan 插入 Stops。
 //   - 空闲电梯没有顺路任务可追加时，才接收新的请求。
 type SCANScheduler struct{}
 
@@ -118,11 +118,11 @@ func assignSCANRequest(s *System, elevator *Elevator, requestIndex int) {
 	request.AssignedTick = s.CurrentTick
 	request.AssignedElevatorID = elevator.ID
 
-	insertTargetRequest(elevator, request.Floor, request.ID)
+	insertStopPlan(elevator, stopPlanFromRequest(*request))
 }
 
 func canTakeRequestInSCAN(e Elevator, request Request) bool {
-	if e.EmergencyStop || len(e.TargetFloors) == 0 {
+	if e.EmergencyStop || len(e.Stops) == 0 {
 		return false
 	}
 
@@ -161,26 +161,22 @@ func alignIdleElevatorScanDirection(e *Elevator, requestFloor int) {
 	e.ScanDirection = DirectionUp
 }
 
-func insertTargetRequest(e *Elevator, floor int, requestID int64) {
-	e.TargetFloors = append(e.TargetFloors, floor)
-	e.TargetRequestIDs = append(e.TargetRequestIDs, requestID)
-	sortTargetFloorsAndRequests(e)
+func insertStopPlan(e *Elevator, stop StopPlan) {
+	addStopPlan(e, stop)
+	sortStops(e)
 }
 
-func sortTargetFloorsAndRequests(e *Elevator) {
-	for i := 1; i < len(e.TargetFloors); i++ {
-		floor := e.TargetFloors[i]
-		requestID := e.TargetRequestIDs[i]
+func sortStops(e *Elevator) {
+	for i := 1; i < len(e.Stops); i++ {
+		stop := e.Stops[i]
 		j := i - 1
 
-		for j >= 0 && shouldMoveTargetBefore(floor, e.TargetFloors[j], e.ScanDirection) {
-			e.TargetFloors[j+1] = e.TargetFloors[j]
-			e.TargetRequestIDs[j+1] = e.TargetRequestIDs[j]
+		for j >= 0 && shouldMoveTargetBefore(stop.Floor, e.Stops[j].Floor, e.ScanDirection) {
+			e.Stops[j+1] = e.Stops[j]
 			j--
 		}
 
-		e.TargetFloors[j+1] = floor
-		e.TargetRequestIDs[j+1] = requestID
+		e.Stops[j+1] = stop
 	}
 }
 

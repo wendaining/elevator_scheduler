@@ -36,8 +36,8 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 	if system.Requests[0].Status != RequestAssigned {
 		t.Fatalf("request status = %q, want %q", system.Requests[0].Status, RequestAssigned)
 	}
-	if system.Requests[0].AssignedTick != 1 {
-		t.Fatalf("assigned tick = %d, want 1", system.Requests[0].AssignedTick)
+	if system.Requests[0].AssignedTick != 0 {
+		t.Fatalf("assigned tick = %d, want 0", system.Requests[0].AssignedTick)
 	}
 	if system.Requests[0].AssignedElevatorID != 1 {
 		t.Fatalf("assigned elevator ID = %d, want 1", system.Requests[0].AssignedElevatorID)
@@ -71,14 +71,14 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	if !firstElevator.DoorOpen {
 		t.Fatal("first elevator door is closed, want open")
 	}
-	if len(firstElevator.TargetFloors) != 0 {
-		t.Fatalf("target floor count = %d, want 0", len(firstElevator.TargetFloors))
+	if len(firstElevator.Stops) != 0 {
+		t.Fatalf("stop count = %d, want 0", len(firstElevator.Stops))
 	}
 	if system.Requests[0].Status != RequestDone {
 		t.Fatalf("request status = %q, want %q", system.Requests[0].Status, RequestDone)
 	}
-	if system.Requests[0].CompletedTick != 2 {
-		t.Fatalf("completed tick = %d, want 2", system.Requests[0].CompletedTick)
+	if system.Requests[0].CompletedTick != 1 {
+		t.Fatalf("completed tick = %d, want 1", system.Requests[0].CompletedTick)
 	}
 }
 
@@ -117,8 +117,8 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 	if system.Requests[0].Status != RequestDone {
 		t.Fatalf("request status = %q, want %q after door opens", system.Requests[0].Status, RequestDone)
 	}
-	if system.Requests[0].CompletedTick != 4 {
-		t.Fatalf("completed tick = %d, want 4", system.Requests[0].CompletedTick)
+	if system.Requests[0].CompletedTick != 3 {
+		t.Fatalf("completed tick = %d, want 3", system.Requests[0].CompletedTick)
 	}
 }
 
@@ -142,5 +142,38 @@ func TestNewSystemStoresTimingParameters(t *testing.T) {
 	}
 	if system.TickPerPassenger != 2 {
 		t.Fatalf("tick per passenger = %d, want 2", system.TickPerPassenger)
+	}
+}
+
+func TestStopPlanKeepsSameFloorDifferentReasonsSeparate(t *testing.T) {
+	elevator := Elevator{}
+
+	addStopPlan(&elevator, StopPlan{
+		Floor:      6,
+		Reason:     StopReasonHallUp,
+		Direction:  DirectionUp,
+		RequestIDs: []int64{1},
+	})
+	addStopPlan(&elevator, StopPlan{
+		Floor:      6,
+		Reason:     StopReasonHallDown,
+		Direction:  DirectionDown,
+		RequestIDs: []int64{2},
+	})
+	addStopPlan(&elevator, StopPlan{
+		Floor:      6,
+		Reason:     StopReasonHallUp,
+		Direction:  DirectionUp,
+		RequestIDs: []int64{3},
+	})
+
+	if len(elevator.Stops) != 2 {
+		t.Fatalf("stop count = %d, want 2", len(elevator.Stops))
+	}
+	if len(elevator.Stops[0].RequestIDs) != 2 {
+		t.Fatalf("first stop request IDs = %v, want two IDs", elevator.Stops[0].RequestIDs)
+	}
+	if elevator.Stops[1].Reason != StopReasonHallDown {
+		t.Fatalf("second stop reason = %q, want %q", elevator.Stops[1].Reason, StopReasonHallDown)
 	}
 }

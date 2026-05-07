@@ -5148,3 +5148,194 @@ CurrentTick 始终表示已经进入并正在处理的 tick
 电梯花了多少 tick 才到达
 请求什么时候真正完成
 ```
+
+### 2026-05-07：用 `StopPlan` 替代 `TargetFloors []int`
+
+本次完成了 6.5.4 的核心重构：不再用两个平行切片表示电梯任务。
+
+之前的临时模型是：
+
+```go
+TargetFloors []int
+TargetRequestIDs []int64
+```
+
+它的问题是：
+
+```text
+TargetFloors 只知道“去哪一层”
+TargetRequestIDs 只知道“完成哪些请求”
+两者必须依靠下标对齐
+同一楼层不同方向请求很容易被错误合并
+```
+
+例如：
+
+```text
+6 楼 hall up
+6 楼 hall down
+6 楼 cabin target
+```
+
+如果只保存：
+
+```go
+TargetFloors = []int{6}
+```
+
+系统就不知道电梯在 6 楼停靠的原因是什么。
+
+#### 新结构
+
+现在新增了：
+
+```go
+type StopReason string
+
+const (
+	StopReasonHallUp   StopReason = "hall_up"
+	StopReasonHallDown StopReason = "hall_down"
+	StopReasonCabin    StopReason = "cabin"
+)
+
+type StopPlan struct {
+	Floor      int        `json:"floor"`
+	Reason     StopReason `json:"reason"`
+	Direction  Direction  `json:"direction"`
+	RequestIDs []int64    `json:"requestIds"`
+}
+```
+
+`Elevator` 里改成：
+
+```go
+Stops []StopPlan `json:"stops"`
+```
+
+所以现在一部电梯的任务不再是“目标楼层列表”，而是“停靠计划列表”。
+
+#### StopPlan 的语义
+
+一个 `StopPlan` 表示：
+
+```text
+电梯需要在 Floor 这一层停靠
+停靠原因是 Reason
+这个停靠会完成 RequestIDs 里的请求
+```
+
+例如：
+
+```text
+StopPlan{
+  Floor: 6,
+  Reason: hall_up,
+  Direction: up,
+  RequestIDs: [1, 3],
+}
+```
+
+表示：
+
+```text
+电梯要在 6 楼停靠，用于完成 1 号和 3 号上行 hall 请求。
+```
+
+如果同一层还有下行请求，则会是另一个 `StopPlan`：
+
+```text
+StopPlan{
+  Floor: 6,
+  Reason: hall_down,
+  Direction: down,
+  RequestIDs: [2],
+}
+```
+
+这样同楼层不同方向不会被错误合并。
+
+#### 合并规则
+
+当前合并规则在 `addStopPlan()` 里：
+
+```text
+Floor 相同
+Reason 相同
+Direction 相同
+```
+
+才会合并为同一个停靠计划，并把 request ID 追加进去。
+
+如果楼层相同但 reason 不同，例如 hall up 和 hall down，就不会合并。
+
+#### 调度器如何使用
+
+普通调度器分配请求时，会调用：
+
+```go
+s.assignRequestToElevator(requestIndex, elevatorIndex)
+```
+
+这个函数会：
+
+```text
+1. 把请求状态改为 assigned
+2. 记录 AssignedTick
+3. 记录 AssignedElevatorID
+4. 根据 request 生成 StopPlan
+5. 把 StopPlan 加入 elevator.Stops
+```
+
+SCAN 调度器也改成插入 `StopPlan`，并继续按扫描方向排序：
+
+```text
+上行：楼层从低到高
+下行：楼层从高到低
+```
+
+#### 电梯到站如何完成请求
+
+`stepElevator()` 现在读取：
+
+```go
+nextStop := e.Stops[0]
+```
+
+而不是：
+
+```go
+targetFloor := e.TargetFloors[0]
+```
+
+当电梯到达 `nextStop.Floor` 后：
+
+```text
+1. 开门
+2. 遍历 nextStop.RequestIDs
+3. 把这些请求标记为 done
+4. 从 Stops 中移除这个 StopPlan
+```
+
+#### 测试覆盖
+
+这次补充和调整了测试：
+
+```text
+同一楼层 hall up 和 hall down 不会被错误合并
+SCAN 上行顺路插入后，Stops 顺序是 [6, 10]
+SCAN 下行顺路插入后，Stops 顺序是 [8, 2]
+到站后 Stops 会被移除，请求状态会变成 done
+```
+
+#### 当前限制
+
+`StopPlan` 已经解决了“为什么停靠”的表达问题，但它仍然是中间阶段：
+
+```text
+还没有并发模型
+还没有最终 LOOK / SCAN cost 函数
+还没有前端展示 stops
+还没有电梯人数和负载模型
+```
+
+其中人数和负载已经被移动到后续扩展 TODO，不进入当前核心路线。
