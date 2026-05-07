@@ -15,6 +15,7 @@ func canAcceptRequest(e Elevator) bool {
 	return !e.EmergencyStop && len(e.TargetFloors) == 0
 }
 
+// 找到所有 pending 请求中最早的一个，返回它在 s.Requests 中的下标。如果没有 pending 请求，返回 -1。
 func firstPendingRequestIndex(s *System) int {
 	indices := requestIndicesByStatus(s, RequestPending)
 	if len(indices) == 0 {
@@ -23,10 +24,12 @@ func firstPendingRequestIndex(s *System) int {
 	return indices[0]
 }
 
+// 判断系统中是否有待分配的请求
 func hasPendingRequests(s *System) bool {
 	return firstPendingRequestIndex(s) != -1
 }
 
+// 返回系统中所有请求状态为 status 的请求在 s.Requests 中的下标列表。
 func requestIndicesByStatus(s *System, status RequestStatus) []int {
 	indices := []int{}
 	for i, request := range s.Requests {

@@ -4998,3 +4998,153 @@ StopPlan
 并发模型
 API 和前端切换
 ```
+
+关于系统初始化参数，当前先不使用 `SystemConfig`。楼层数、电梯数、跨楼层耗时、开门基础耗时等参数直接作为 `NewSystem(...)` 的参数传入，并保存在 `System` 字段里。这样和当前的 `FloorCount` 设计保持一致。后续如果前端需要动态修改，再设计 API 扩展。
+
+### 2026-05-07：确定 `Step()` 和 tick 的最终语义
+
+这次重新整理了时间片模型。目标是让系统看起来像现实世界中的离散模拟：
+
+```text
+前端定时调用一次 /api/step
+后端系统进入下一个 tick
+调度器在这个 tick 做即时决策
+每部电梯在这个 tick 执行一个动作单位
+前端再读取 /api/state 显示结果
+```
+
+因此当前规则是：
+
+```text
+每调用一次 Step()，CurrentTick 先 +1。
+CurrentTick 表示“正在处理的 tick 编号”。
+调度分配发生在这个 tick 内，但调度本身不额外消耗 tick。
+电梯移动、开门停靠等物理动作消耗 tick。
+```
+
+`Step()` 的顺序是：
+
+```text
+1. CurrentTick += 1
+2. scheduler.Assign(s) 尝试分配 pending request
+3. 每部电梯执行一个行动单位
+4. 返回当前状态
+```
+
+这样时间戳的含义更直接：
+
+```text
+CreatedTick
+  请求被创建时，系统已经处理到哪个 tick。
+
+AssignedTick
+  请求在哪个 tick 被调度器分配给电梯。
+
+CompletedTick
+  请求在哪个 tick 被电梯到站开门完成。
+```
+
+例如系统启动时：
+
+```text
+CurrentTick = 0
+```
+
+此时创建一个请求：
+
+```text
+CreatedTick = 0
+```
+
+下一次前端触发 `Step()`：
+
+```text
+CurrentTick = 1
+调度器分配请求
+AssignedTick = 1
+电梯执行第 1 个行动单位
+```
+
+#### `TicksPerFloor` 现在如何生效
+
+之前虽然 `System` 有：
+
+```go
+TicksPerFloor int
+```
+
+但电梯每次 `Step()` 都直接移动一层，所以这个字段没有真正参与模拟。
+
+现在 `Elevator` 增加了：
+
+```go
+MoveRemainingTicks int
+```
+
+它表示当前跨越相邻两层还剩多少 tick。
+
+例如：
+
+```text
+TicksPerFloor = 3
+电梯从 1 楼去 2 楼
+```
+
+那么：
+
+```text
+Step 1:
+  MoveRemainingTicks 从 3 变成 2
+  电梯仍在 1 楼
+
+Step 2:
+  MoveRemainingTicks 从 2 变成 1
+  电梯仍在 1 楼
+
+Step 3:
+  MoveRemainingTicks 从 1 变成 0
+  电梯到达 2 楼
+```
+
+这样 `TicksPerFloor` 才真正表达了“跨越一层需要几个时间片”。
+
+#### 开门时间如何生效
+
+现在 `Elevator` 还增加了：
+
+```go
+DoorRemainingTicks int
+```
+
+当电梯到达目标楼层后，会：
+
+```text
+1. 打开门
+2. 完成对应 request
+3. 设置 DoorRemainingTicks = System.DoorBaseTicks
+```
+
+之后每个 `Step()` 会让 `DoorRemainingTicks` 减 1。减到 0 后，门关闭。
+
+当前还没有人数模型，所以 `TickPerPassenger` 暂时还不会进入计算。它会等后续扩展“电梯负载 / 上下客耗时模型”时再使用。
+
+#### 这次重构后的结论
+
+现在时间片语义更清楚：
+
+```text
+Step 触发 tick 前进
+调度发生在 tick 内，不额外计时
+移动按 TicksPerFloor 消耗多个 tick
+开门停靠按 DoorBaseTicks 消耗多个 tick
+CurrentTick 始终表示已经进入并正在处理的 tick
+```
+
+这也让后续调度算法可以更准确地解释：
+
+```text
+请求什么时候创建
+请求什么时候被分配
+电梯花了多少 tick 才到达
+请求什么时候真正完成
+```

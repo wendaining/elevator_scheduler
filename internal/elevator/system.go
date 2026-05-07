@@ -15,6 +15,7 @@ func NewSystem(
 	doorBaseTicks int,
 	tickPerPassenger int,
 ) (*System, error) {
+	// 数据合法性检查
 	if floors < 1 {
 		return nil, fmt.Errorf("floors must be at least 1, got %d", floors)
 	}
@@ -34,14 +35,16 @@ func NewSystem(
 	elevators := make([]Elevator, elevatorCount)
 	for i := range elevators {
 		elevators[i] = Elevator{
-			ID:               i + 1,
-			CurrentFloor:     1,
-			Direction:        DirectionIdle,
-			ScanDirection:    DirectionUp,
-			DoorOpen:         false,
-			TargetFloors:     []int{},
-			TargetRequestIDs: []int64{},
-			EmergencyStop:    false,
+			ID:                 i + 1,
+			CurrentFloor:       1,
+			Direction:          DirectionIdle,
+			ScanDirection:      DirectionUp,
+			DoorOpen:           false,
+			TargetFloors:       []int{},
+			TargetRequestIDs:   []int64{},
+			MoveRemainingTicks: 0,
+			DoorRemainingTicks: 0,
+			EmergencyStop:      false,
 		}
 	}
 
@@ -79,7 +82,7 @@ func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*
 		Floor:              floor,
 		Direction:          direction,
 		Kind:               kind,
-		Status:             RequestPending,
+		Status:             RequestPending, // 默认状态是 pending，等待调度器分配
 		CreatedTick:        s.CurrentTick,
 		AssignedTick:       0,
 		CompletedTick:      0,
@@ -107,8 +110,10 @@ func (s *System) Snapshot() ([]byte, error) {
 	return json.MarshalIndent(s, "", "  ")
 }
 
-// Step 推进系统一个离散时间片。每调用一次，先尝试将待处理请求分配给电梯，
-// 然后让每部电梯向各自的目标楼层移动一层（或到达后开门）。
+// Step 推进系统一个离散时间片。
+// 每次调用 Step()，系统先进入下一个 tick，然后在这个 tick 内完成：
+// 1. 调度器尝试分配请求。调度是即时决策，不额外消耗 tick。
+// 2. 每部电梯执行一个行动单位，例如移动倒计时、开门倒计时或空闲等待。
 func (s *System) Step() error {
 	if len(s.Elevators) == 0 {
 		return fmt.Errorf("system has no elevators")
@@ -118,8 +123,6 @@ func (s *System) Step() error {
 		return fmt.Errorf("No valid scheduler.")
 	}
 
-	s.CurrentTick++
-
 	assigned := s.scheduler.Assign(s)
 	if assigned {
 		log.Println("assigned one request")
@@ -127,12 +130,13 @@ func (s *System) Step() error {
 	for i := range s.Elevators {
 		stepElevator(s, &s.Elevators[i])
 	}
-
+	s.CurrentTick++
 	return nil
 }
 
-// stepElevator 推进单部电梯一个时间片：每次最多向目标楼层移动一层，
-// 到达目标楼层后开门并移除该目标。如果电梯处于紧急停止状态，则保持不动。
+// stepElevator 推进单部电梯一个行动 tick。
+// 跨越相邻两层需要消耗 s.TicksPerFloor 个 tick；
+// 到达目标层后，再用 s.DoorBaseTicks 表示开门停靠时间。
 func stepElevator(s *System, e *Elevator) {
 	// 紧急停止状态下不移动
 	if e.EmergencyStop {
@@ -140,9 +144,16 @@ func stepElevator(s *System, e *Elevator) {
 		return
 	}
 
-	// 如果门开着，先关门（下一次 Step 再移动）
+	// 门开着时，当前 tick 用于停靠，不移动。
 	if e.DoorOpen {
-		e.DoorOpen = false
+		if e.DoorRemainingTicks > 0 {
+			e.DoorRemainingTicks--
+		}
+		if e.DoorRemainingTicks == 0 {
+			e.DoorOpen = false
+		}
+		e.Direction = DirectionIdle
+		return
 	}
 
 	// 没有目标楼层，保持空闲
@@ -151,27 +162,50 @@ func stepElevator(s *System, e *Elevator) {
 		return
 	}
 
-	// 向第一个目标楼层移动一层
 	targetFloor := e.TargetFloors[0]
-	if e.CurrentFloor < targetFloor {
-		e.Direction = DirectionUp
-		e.CurrentFloor++
-		return
-	} else if e.CurrentFloor > targetFloor {
-		e.Direction = DirectionDown
-		e.CurrentFloor--
-		return
-	} else { // 已到达目标楼层：开门，移除该目标
+
+	// 当前已经在目标楼层：本 tick 用于开门、完成请求、移除目标。
+	if e.CurrentFloor == targetFloor {
 		e.Direction = DirectionIdle
 		e.DoorOpen = true
+		e.DoorRemainingTicks = s.DoorBaseTicks
 		if len(e.TargetRequestIDs) > 0 {
-			s.completeRequest(e.TargetRequestIDs[0])
+			s.completeRequest(e.TargetRequestIDs[0], s.CurrentTick)
 			e.TargetRequestIDs = e.TargetRequestIDs[1:]
 		}
 		e.TargetFloors = e.TargetFloors[1:]
+		if e.DoorRemainingTicks == 0 {
+			e.DoorOpen = false
+		}
+		return
+	}
+
+	// 当前不在目标楼层：本 tick 用于向目标方向移动。
+	if e.CurrentFloor < targetFloor {
+		e.Direction = DirectionUp
+		moveOneTick(e, 1, s.TicksPerFloor)
+		return
+	}
+
+	e.Direction = DirectionDown
+	moveOneTick(e, -1, s.TicksPerFloor)
+}
+
+// moveOneTick 是一个辅助函数，用于将电梯 e 向目标方向移动一个 tick。
+// floorDelta 应该是 1（向上）或 -1（向下）。函数会更新电梯的 CurrentFloor 和 MoveRemainingTicks。
+func moveOneTick(e *Elevator, floorDelta int, ticksPerFloor int) {
+	if e.MoveRemainingTicks == 0 {
+		e.MoveRemainingTicks = ticksPerFloor
+	}
+	e.MoveRemainingTicks--
+	if e.MoveRemainingTicks == 0 {
+		e.CurrentFloor += floorDelta
 	}
 }
 
+// 给 System 添加一些辅助方法，方便调度器调用：
+
+// 用于将某个请求分配给某部电梯，更新请求状态并将目标楼层添加到电梯的任务列表中。
 func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
 	request := &s.Requests[requestIndex]
 	elevator := &s.Elevators[elevatorIndex]
@@ -184,13 +218,14 @@ func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
 	elevator.TargetRequestIDs = append(elevator.TargetRequestIDs, request.ID)
 }
 
-func (s *System) completeRequest(requestID int64) {
+// 用于将某个请求标记为完成状态，并记录完成的时间片。
+func (s *System) completeRequest(requestID int64, completedTick int) {
 	for i := range s.Requests {
 		if s.Requests[i].ID != requestID {
 			continue
 		}
 		s.Requests[i].Status = RequestDone
-		s.Requests[i].CompletedTick = s.CurrentTick
+		s.Requests[i].CompletedTick = completedTick
 		return
 	}
 }

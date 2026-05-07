@@ -71,7 +71,12 @@ type Elevator struct {
 	// TargetRequestIDs 临时和 TargetFloors 按下标对齐，用来在到站时完成对应请求。
 	// 后续 6.5.4 会用 StopPlan 替代这两个平行切片。
 	TargetRequestIDs []int64 `json:"targetRequestIds"`
-	EmergencyStop    bool    `json:"emergencyStop"`
+	// MoveRemainingTicks 表示当前跨越相邻两层还剩多少 tick。
+	// 它让 TicksPerFloor 真正参与模拟，而不是每次 Step 都移动一整层。
+	MoveRemainingTicks int `json:"moveRemainingTicks"`
+	// DoorRemainingTicks 表示门保持打开还剩多少 tick。
+	DoorRemainingTicks int  `json:"doorRemainingTicks"`
+	EmergencyStop      bool `json:"emergencyStop"`
 }
 
 // System 表示整个电梯调度系统。
@@ -85,10 +90,9 @@ type System struct {
 	CurrentTick int `json:"currentTick"`
 
 	// 下面三个字段是后续更真实时间模型的配置预留。
-	// 当前 Step() 仍然是“一次移动一层”的简单模型，后续会改成跨楼层和开门都消耗多个 tick。
-	TicksPerFloor    int `json:"ticksPerFloor"`
-	DoorBaseTicks    int `json:"doorBaseTicks"`
-	TickPerPassenger int `json:"tickPerPassenger"`
+	TicksPerFloor    int `json:"ticksPerFloor"`    // 移动一层需要的 tick 数
+	DoorBaseTicks    int `json:"doorBaseTicks"`    // 开关门的基础 tick 数
+	TickPerPassenger int `json:"tickPerPassenger"` // 每多一个乘客，开关门额外增加的 tick 数
 
 	// Elevators 存储大楼中的所有电梯轿厢。
 	Elevators []Elevator `json:"elevators"`

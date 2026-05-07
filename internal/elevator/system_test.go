@@ -3,7 +3,7 @@ package elevator
 import "testing"
 
 func TestStepMovesElevatorAfterRequest(t *testing.T) {
-	system, err := NewSystem(20, 5, 5, 2, 1)
+	system, err := NewSystem(20, 5, 1, 2, 1)
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 }
 
 func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
-	system, err := NewSystem(20, 5, 5, 2, 1)
+	system, err := NewSystem(20, 5, 1, 2, 1)
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -79,6 +79,46 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	}
 	if system.Requests[0].CompletedTick != 2 {
 		t.Fatalf("completed tick = %d, want 2", system.Requests[0].CompletedTick)
+	}
+}
+
+func TestStepUsesTicksPerFloor(t *testing.T) {
+	system, err := NewSystem(20, 5, 3, 2, 1)
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+
+	if _, err := system.AddRequest(2, DirectionUp, RequestKindHall); err != nil {
+		t.Fatalf("AddRequest returned error: %v", err)
+	}
+
+	for step := 1; step <= 2; step++ {
+		if err := system.Step(); err != nil {
+			t.Fatalf("Step %d returned error: %v", step, err)
+		}
+		if system.Elevators[0].CurrentFloor != 1 {
+			t.Fatalf("after step %d floor = %d, want 1", step, system.Elevators[0].CurrentFloor)
+		}
+	}
+
+	if err := system.Step(); err != nil {
+		t.Fatalf("third Step returned error: %v", err)
+	}
+	if system.Elevators[0].CurrentFloor != 2 {
+		t.Fatalf("after third step floor = %d, want 2", system.Elevators[0].CurrentFloor)
+	}
+	if system.Requests[0].Status != RequestAssigned {
+		t.Fatalf("request status = %q, want %q before door opens", system.Requests[0].Status, RequestAssigned)
+	}
+
+	if err := system.Step(); err != nil {
+		t.Fatalf("fourth Step returned error: %v", err)
+	}
+	if system.Requests[0].Status != RequestDone {
+		t.Fatalf("request status = %q, want %q after door opens", system.Requests[0].Status, RequestDone)
+	}
+	if system.Requests[0].CompletedTick != 4 {
+		t.Fatalf("completed tick = %d, want 4", system.Requests[0].CompletedTick)
 	}
 }
 
