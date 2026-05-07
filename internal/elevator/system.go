@@ -22,6 +22,7 @@ func NewSystem(floors int, elevatorCount int) (*System, error) {
 			ID:            i + 1,
 			CurrentFloor:  1,
 			Direction:     DirectionIdle,
+			ScanDirection: DirectionUp,
 			DoorOpen:      false,
 			TargetFloors:  []int{},
 			EmergencyStop: false,

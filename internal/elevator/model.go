@@ -46,7 +46,11 @@ type Elevator struct {
 	ID           int       `json:"id"`
 	CurrentFloor int       `json:"currentFloor"`
 	Direction    Direction `json:"direction"`
-	DoorOpen     bool      `json:"doorOpen"`
+	// ScanDirection 是 SCAN 算法使用的长期扫描方向。
+	// 它和 Direction 不同：Direction 表示当前是否正在移动，
+	// ScanDirection 表示空闲接单时优先沿哪个方向寻找请求。
+	ScanDirection Direction `json:"scanDirection"`
+	DoorOpen      bool      `json:"doorOpen"`
 	// TargetFloors 是此电梯当前的简单任务列表。
 	TargetFloors  []int `json:"targetFloors"`
 	EmergencyStop bool  `json:"emergencyStop"`
