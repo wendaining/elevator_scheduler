@@ -14,12 +14,12 @@ func (FCFSScheduler) Assign(s *System) bool {
 	}
 	// 取出系统中 pending requests 里面第一个请求
 	request := s.PendingRequests[0]
-	for _, elevator := range s.Elevators {
+	for i, elevator := range s.Elevators {
 		if !canAcceptRequest(elevator) {
 			continue
 		}
 		s.PendingRequests = s.PendingRequests[1:]
-		elevator.TargetFloors = append(elevator.TargetFloors, request.Floor)
+		s.Elevators[i].TargetFloors = append(s.Elevators[i].TargetFloors, request.Floor)
 		return true
 	}
 	return false
