@@ -176,15 +176,14 @@
 目标：把 `System.Requests` 从线性切片升级为以请求 ID 为 key 的运行态请求表，避免请求数量长期增长后所有查找都依赖遍历切片。
 
 - [ ] 把 `System.Requests []Request` 改为 `System.Requests map[int64]*Request`
-- [ ] 保留 `nextRequestID` 作为唯一 ID 生成器，明确 `Request.ID` 不是数组下标
+- [ ] 保留 `nextRequestID` 作为唯一 ID 生成器
 - [ ] 修改 `AddRequest`：创建请求后写入 `Requests[request.ID]`
-- [ ] 修改 pending / assigned / done 筛选辅助函数，让它们从 map 中筛选请求
-- [ ] 修改调度器：不再依赖 request 在切片中的下标，而是使用 request ID 或 `*Request`
+- [ ] 修改 pending / assigned 筛选辅助函数，让它们从 map 中筛选请求；删除done类，请求完成之后不再保存在运行态 Requests 中，而是进入历史记录
 - [ ] 修改 `StopPlan.RequestIDs` 的完成逻辑：到站后通过 ID 在 map 中查找请求
-- [ ] 请求完成后从运行态 `Requests` 中删除，避免长期运行时状态无限增长
-- [ ] 如果后续需要统计平均等待时间，应另建统计字段或历史记录，不让运行态 `Requests` 同时承担历史数据库职责
+- [ ] 请求完成后从运行态 `Requests` 中删除，避免长期运行时状态无限增大
 - [ ] 写测试验证：创建请求得到稳定 ID；完成请求后运行态请求表中不再包含该 ID
-- [ ] 在 `docs/record.md` 记录：为什么 `Request.ID` 不能等同于下标，为什么运行态请求表适合用 map
+- [ ] 修改调度器的逻辑，满足当前的状态
+- [ ] 在 `docs/record.md` 记录实现的细节和分析
 - [ ] 做一次小提交，例如 `feat: store active requests by id`
 
 ### 6.5.6 调度接口预留 cost 函数
@@ -199,7 +198,15 @@
 - [ ] 在 `docs/record.md` 记录：cost 函数当前预留了哪些维度，后续如何增强
 - [ ] 做一次小提交，例如 `feat: add scheduler cost interface`
 
-### 6.5.7 重构现有算法和 API
+ ### 6.5.7 请求历史数据库持久化
+
+目标：运行态 `Requests map[int64]*Request` 只保存活跃请求；请求完成后，从运行态 map 删除，并把完整请求生命周期写入数据库，用于后续统计、调度算法对比和课程报告。
+
+- [ ] 明确数据库选型，优先考虑 SQLite：单文件、无需单独启动服务、适合课程项目
+- [ ] 在 `docs/record.md` 记录：为什么运行态状态和历史持久化要分离，为什么本项目选择 SQLite
+- [ ] 做一次小提交，例如 `feat: persist completed requests`
+
+### 6.5.8 重构现有算法和 API
 
 目标：让现有 FCFS、Nearest、SCAN/LOOK、HTTP API 都适配新模型。
 
@@ -216,20 +223,7 @@
 
 ### 6.5 提交拆分要求
 
-这个阶段禁止把所有重构塞进一个提交。推荐拆分顺序：
-
-```text
-commit 1: tick 时钟
-commit 2: RequestStatus / Requests / 删除 PendingRequests
-commit 3: 明确跳过楼层人数模型，整理文档和相关 TODO
-commit 4: StopPlan 替代 TargetFloors
-commit 5: Requests 改为按 ID 索引的运行态 map
-commit 6: Step 到站、开门和完成请求逻辑
-commit 7: scheduler cost 接口
-commit 8: FCFS / Nearest / SCAN 适配新模型
-commit 9: API 适配新状态
-commit 10: 测试和文档补充
-```
+这个阶段禁止把所有重构塞进一个提交。
 
 每个提交都应满足：
 
