@@ -14,20 +14,11 @@ type Server struct {
 
 // RegisterRoutes 把所有 API 路由注册到 mux 上。
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/", s.handleHome)
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/request", s.handleRequest)
-}
-
-func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte("Elevator scheduler server is running.\n"))
+	mux.HandleFunc("/api/step", s.handleStep)
+	mux.Handle("/", http.FileServer(http.Dir("web")))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -105,4 +96,25 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) handleStep(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := s.System.Step(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data, err := s.System.Snapshot()
+	if err != nil {
+		http.Error(w, "failed to get snapshot", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Write(data)
 }
