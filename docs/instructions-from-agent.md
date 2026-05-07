@@ -105,11 +105,135 @@
 - [x] 在 `internal/elevator` 包中实现几个合适的调度算法，并为核心算法补测试
 - [x] 做一次小提交，例如 `feat: add nearest elevator scheduler`
 
+## 6.5 重构为高质量调度模型
+
+目标：先把核心数据模型升级到能支撑真实调度，再继续实现更强的 SCAN/LOOK 和并发模型。这个阶段允许改 `internal/elevator/model.go`、`system.go`、scheduler、API handler 和测试，但仍然不要改前端展示逻辑。
+
+设计原则：
+
+- 不再把“学习版 / 简化版 / 更容易写对”作为核心算法目标。
+- 小步提交，但每一步都必须通向最终的高质量模型。
+- `PendingRequests` 不再作为系统事实来源；请求应保存在统一的 `Requests` 集合中，并通过状态区分 pending、assigned、done。
+- 先完成模型重构和兼容测试，再继续写 cost 函数和高级调度策略。
+
+### 6.5.1 全局时间片模型
+
+目标：用离散时间片作为整个模拟系统的统一时间单位，而不是使用真实时间 `time.Time`。
+
+- [ ] 在 `System` 中增加全局时间片字段，例如 `CurrentTick int`
+- [ ] 约定系统启动时 `CurrentTick = 0`
+- [ ] 每调用一次 `Step()`，`CurrentTick += 1`
+- [ ] 所有请求时间都使用 tick 记录，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
+- [ ] 预留可配置时间参数，例如跨一层需要多少 tick、开门基础时间、每上 / 下一名乘客额外消耗多少 tick
+- [ ] 在 `Snapshot()` / `GET /api/state` 中暴露当前 tick，方便前端同步显示
+- [ ] 写测试验证连续调用 `Step()` 会推动 `CurrentTick` 增长
+- [ ] 在 `docs/record.md` 记录：为什么本项目使用离散 tick，而不是 `time.Time`
+- [ ] 做一次小提交，例如 `feat: add simulation tick clock`
+
+### 6.5.2 请求模型重构
+
+目标：让请求从“临时队列元素”升级为系统内可追踪的对象。
+
+- [ ] 定义 `RequestStatus`，至少包含 `pending`、`assigned`、`done`
+- [ ] 给 `Request` 增加唯一 ID，例如 `ID int64`
+- [ ] 给 `Request` 增加 tick 字段，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
+- [ ] 给 `Request` 增加 `AssignedElevatorID`，用来记录请求被分配给哪部电梯
+- [ ] 在 `System` 中增加 `Requests []Request`
+- [ ] 删除或停止使用 `PendingRequests []Request` 作为状态字段
+- [ ] 如果需要 pending 请求，使用辅助函数从 `Requests` 中筛选 `Status == RequestPending`
+- [ ] 修改 `AddRequest`：创建请求 ID，设置 `CreatedTick = CurrentTick`，初始状态为 `pending`
+- [ ] 修改 `Snapshot()` 和 API 返回，确保可以观察所有请求及其状态
+- [ ] 写测试验证请求创建、分配、完成时状态和 tick 正确变化
+- [ ] 在 `docs/record.md` 记录：为什么请求不能在分配时从系统里消失
+- [ ] 做一次小提交，例如 `feat: track requests by status`
+
+### 6.5.3 楼层模型
+
+目标：让楼层成为系统中的对象，而不是只有一个楼层编号。
+
+- [ ] 定义 `Floor` 结构体
+- [ ] 在 `System` 中增加 `Floors []Floor`
+- [ ] 每个 `Floor` 至少记录楼层编号、等待上行人数、等待下行人数
+- [ ] 设计 hall 请求和楼层人数的关系：楼层触发请求，请求记录方向和人数变化
+- [ ] 明确当电梯到达楼层并完成接人时，如何减少对应楼层等待人数
+- [ ] 暂时不让前端输入人数也可以，但后端模型要能表达人数
+- [ ] 写测试验证创建 hall 请求会影响对应楼层等待人数
+- [ ] 在 `docs/record.md` 记录：为什么楼层也需要建模
+- [ ] 做一次小提交，例如 `feat: model floor waiting passengers`
+
+### 6.5.4 电梯负载和停靠计划
+
+目标：让电梯能表达乘客数量、容量限制和更真实的停靠计划。
+
+- [ ] 给 `Elevator` 增加 `Capacity int`
+- [ ] 给 `Elevator` 增加 `PassengerCount int`
+- [ ] 根据需要增加 `DoorRemainingTicks` 或类似字段，用于表示开门 / 乘客上下电梯耗时
+- [ ] 定义 `StopPlan` 结构体，用于替代 `TargetFloors []int`
+- [ ] `StopPlan` 至少包含 `Floor`、`RequestIDs`、是否接上行乘客、是否接下行乘客、是否有乘客下电梯等信息
+- [ ] 把 `Elevator.TargetFloors` 重构为 `Elevator.Stops []StopPlan`
+- [ ] 修改电梯移动逻辑：根据 `Stops` 决定下一站
+- [ ] 修改到站逻辑：开门、处理上下客、更新楼层人数、更新电梯人数、完成相关请求
+- [ ] 写测试验证同一楼层上行和下行请求不会被错误合并
+- [ ] 写测试验证电梯容量限制会影响接人
+- [ ] 在 `docs/record.md` 记录：`StopPlan` 相比 `[]int` 解决了哪些问题
+- [ ] 做一次小提交，例如 `feat: replace target floors with stop plans`
+
+### 6.5.5 调度接口预留 cost 函数
+
+目标：先把高级调度需要的接口边界留好，但不急着完成最终 cost 公式。
+
+- [ ] 设计调度评分结构，例如 `AssignmentScore` 或 `AssignmentCandidate`
+- [ ] 预留 cost 计算接口，例如 `EstimateCost(system *System, elevator Elevator, request Request) int`
+- [ ] 让 SCAN/LOOK 调度器通过统一入口选择候选电梯
+- [ ] cost 函数先返回可解释的基础分数，但结构上要能加入等待时间补偿、掉头惩罚、负载惩罚
+- [ ] 写测试验证调度器能基于 cost 选择候选电梯
+- [ ] 在 `docs/record.md` 记录：cost 函数当前预留了哪些维度，后续如何增强
+- [ ] 做一次小提交，例如 `feat: add scheduler cost interface`
+
+### 6.5.6 重构现有算法和 API
+
+目标：让现有 FCFS、Nearest、SCAN/LOOK、HTTP API 都适配新模型。
+
+- [ ] 重构 FCFS：从 `Requests` 中选择最早的 pending 请求
+- [ ] 重构 Nearest：基于 pending 请求和电梯当前位置选择候选电梯
+- [ ] 重构 SCAN/LOOK：基于 `Stops`、`ScanDirection` 和请求方向追加或分配停靠计划
+- [ ] 重构 `POST /api/request`：创建请求，并更新楼层等待人数
+- [ ] 重构 `GET /api/state`：返回 tick、floors、requests、elevators、schedulerName
+- [ ] 保持 API 错误处理清晰，例如非法楼层、非法方向、人数不合法
+- [ ] 用 `curl` 验证新请求模型能从 API 进入系统
+- [ ] 跑通 `go test ./...`
+- [ ] 在 `docs/record.md` 记录新状态 JSON 的关键字段
+- [ ] 做一次小提交，例如 `feat: adapt api to request state model`
+
+### 6.5 提交拆分要求
+
+这个阶段禁止把所有重构塞进一个提交。推荐拆分顺序：
+
+```text
+commit 1: tick 时钟
+commit 2: RequestStatus / Requests / 删除 PendingRequests
+commit 3: Floor 模型和楼层人数
+commit 4: Elevator 负载字段和 StopPlan
+commit 5: Step 到站和上下客逻辑
+commit 6: scheduler cost 接口
+commit 7: FCFS / Nearest / SCAN 适配新模型
+commit 8: API 适配新状态
+commit 9: 测试和文档补充
+```
+
+每个提交都应满足：
+
+- [ ] 能用一句话说明这次改动的边界
+- [ ] 不混入前端 UI 改动
+- [ ] 包含必要测试或至少保留明确的验证方式
+- [ ] 提交前运行 `gofmt` 和 `go test ./...`
+- [ ] 如果某个提交暂时导致 API 返回字段变化，必须同步更新 `docs/record.md` 说明
+
 ## 7. 引入并发模型
 
 目标：满足课程中“每部电梯作为独立执行单元”的要求。
 
-- [ ] 在同步版本已经稳定后，再开始加入 goroutine
+- [ ] 在 tick、Requests、Floors、Stops、基础调度器都稳定后，再开始加入 goroutine
 - [ ] 设计每部电梯的运行循环
 - [ ] 使用 channel 传递请求或控制信号
 - [ ] 使用 mutex 或单线程事件循环保护共享状态，避免数据竞争
