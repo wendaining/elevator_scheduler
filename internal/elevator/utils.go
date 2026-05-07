@@ -47,6 +47,9 @@ func floorDistance(a int, b int) int {
 	return b - a
 }
 
+// 将一个 Request 转换成对应的 StopPlan，方便调度器处理。
+// 对于 cabin 请求，reason 固定为 cabin；
+// 对于 hall 请求，根据 direction 区分 reason 是 hall_up 还是 hall_down。
 func stopPlanFromRequest(request Request) StopPlan {
 	reason := StopReasonCabin
 	if request.Kind == RequestKindHall && request.Direction == DirectionUp {
@@ -64,6 +67,9 @@ func stopPlanFromRequest(request Request) StopPlan {
 	}
 }
 
+// addStopPlan 将一个停靠计划添加到电梯的停靠计划列表中。
+// 如果已经有一个相同的停靠计划（同一层、同一原因、同一方向），
+// 则将请求 ID 合并到已有的停靠计划中，而不是添加一个新的停靠计划。
 func addStopPlan(e *Elevator, stop StopPlan) {
 	for i := range e.Stops {
 		if !isSameStop(e.Stops[i], stop) {
@@ -75,6 +81,8 @@ func addStopPlan(e *Elevator, stop StopPlan) {
 	e.Stops = append(e.Stops, stop)
 }
 
+// 判断是不是同一个 StopPlan：
+// 同一层、同一原因、同一方向。
 func isSameStop(a StopPlan, b StopPlan) bool {
 	return a.Floor == b.Floor &&
 		a.Reason == b.Reason &&
