@@ -8,7 +8,21 @@ import (
 )
 
 func main() {
-	system, err := elevator.NewSystem(20, 5)
+	const (
+		defaultFloorCount       = 20
+		defaultElevatorCount    = 5
+		defaultTicksPerFloor    = 5
+		defaultDoorBaseTicks    = 2
+		defaultTickPerPassenger = 1
+	)
+
+	system, err := elevator.NewSystem(
+		defaultFloorCount,
+		defaultElevatorCount,
+		defaultTicksPerFloor,
+		defaultDoorBaseTicks,
+		defaultTickPerPassenger,
+	)
 	if err != nil {
 		log.Fatalf("failed to create elevator system: %v", err)
 	}

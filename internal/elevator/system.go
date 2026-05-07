@@ -6,14 +6,29 @@ import (
 	"log"
 )
 
-// NewSystem 是 System 的构造函数，接收楼层数和电梯数量，返回初始化后的系统。
+// NewSystem 是 System 的构造函数，接收楼层数、电梯数量和基础时间参数，返回初始化后的系统。
 // 如果参数不合法（小于 1），返回错误。
-func NewSystem(floors int, elevatorCount int) (*System, error) {
+func NewSystem(
+	floors int,
+	elevatorCount int,
+	ticksPerFloor int,
+	doorBaseTicks int,
+	tickPerPassenger int,
+) (*System, error) {
 	if floors < 1 {
 		return nil, fmt.Errorf("floors must be at least 1, got %d", floors)
 	}
 	if elevatorCount < 1 {
 		return nil, fmt.Errorf("elevator count must be at least 1, got %d", elevatorCount)
+	}
+	if ticksPerFloor < 1 {
+		return nil, fmt.Errorf("ticks per floor must be at least 1, got %d", ticksPerFloor)
+	}
+	if doorBaseTicks < 0 {
+		return nil, fmt.Errorf("door base ticks must be at least 0, got %d", doorBaseTicks)
+	}
+	if tickPerPassenger < 0 {
+		return nil, fmt.Errorf("tick per passenger must be at least 0, got %d", tickPerPassenger)
 	}
 
 	elevators := make([]Elevator, elevatorCount)
@@ -35,9 +50,9 @@ func NewSystem(floors int, elevatorCount int) (*System, error) {
 	return &System{
 		FloorCount:       floors,
 		CurrentTick:      0,
-		TicksPerFloor:    5,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
+		TicksPerFloor:    ticksPerFloor,
+		DoorBaseTicks:    doorBaseTicks,
+		TickPerPassenger: tickPerPassenger,
 		Elevators:        elevators,
 		Requests:         []Request{},
 		SchedulerName:    scheduler.Name(),

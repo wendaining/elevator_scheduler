@@ -3,7 +3,7 @@ package elevator
 import "testing"
 
 func TestStepMovesElevatorAfterRequest(t *testing.T) {
-	system, err := NewSystem(20, 5)
+	system, err := NewSystem(20, 5, 5, 2, 1)
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 }
 
 func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
-	system, err := NewSystem(20, 5)
+	system, err := NewSystem(20, 5, 5, 2, 1)
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -79,5 +79,28 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	}
 	if system.Requests[0].CompletedTick != 2 {
 		t.Fatalf("completed tick = %d, want 2", system.Requests[0].CompletedTick)
+	}
+}
+
+func TestNewSystemStoresTimingParameters(t *testing.T) {
+	system, err := NewSystem(12, 3, 7, 4, 2)
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+
+	if system.FloorCount != 12 {
+		t.Fatalf("floor count = %d, want 12", system.FloorCount)
+	}
+	if len(system.Elevators) != 3 {
+		t.Fatalf("elevator count = %d, want 3", len(system.Elevators))
+	}
+	if system.TicksPerFloor != 7 {
+		t.Fatalf("ticks per floor = %d, want 7", system.TicksPerFloor)
+	}
+	if system.DoorBaseTicks != 4 {
+		t.Fatalf("door base ticks = %d, want 4", system.DoorBaseTicks)
+	}
+	if system.TickPerPassenger != 2 {
+		t.Fatalf("tick per passenger = %d, want 2", system.TickPerPassenger)
 	}
 }
