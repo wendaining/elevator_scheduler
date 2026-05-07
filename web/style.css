@@ -79,6 +79,19 @@ button:hover {
   margin: 0 0 12px;
 }
 
+.request-mode {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 12px;
+}
+
+.mode-button.active {
+  background: #17202a;
+  border-color: #17202a;
+  color: #ffffff;
+}
+
 .floor-list {
   display: grid;
   gap: 8px;
@@ -90,6 +103,10 @@ button:hover {
   display: grid;
   gap: 8px;
   grid-template-columns: 48px 1fr 1fr;
+}
+
+.wide-button {
+  grid-column: span 2;
 }
 
 .floor-label {

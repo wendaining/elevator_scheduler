@@ -3406,3 +3406,191 @@ go run ./cmd/server
 所以结论是：Go 后端托管一切没有问题，尤其适合当前项目；Nginx 不是必须的，而是生产部署中常见的工程工具。
 
 > wdn注：这里其实没太看懂... 感觉是没有实际操作导致的，什么反向代理都看不懂，之后系统学习一下吧，先得补网络的知识。
+
+### 13. 前端如何区分 Hall 请求和 Cabin 请求
+
+之前 `web/app.js` 里提交请求时写死了：
+
+```js
+kind: "hall"
+```
+
+这意味着前端只能提交楼层外部请求，也就是人在电梯外面按“上行 / 下行”按钮。
+
+但电梯项目里其实有两类请求：
+
+```text
+Hall 请求
+  来自楼层外部按钮
+  用户表达：我在某一层，我要上行或下行
+
+Cabin 请求
+  来自电梯内部按钮
+  用户表达：我已经在电梯里，我要去某一层
+```
+
+所以前端现在增加了一个请求类型切换：
+
+```html
+<button id="hallModeButton">Hall</button>
+<button id="cabinModeButton">Cabin</button>
+```
+
+对应的 JavaScript 状态是：
+
+```js
+let currentRequestKind = "hall";
+```
+
+#### Hall 模式
+
+Hall 模式下，每一层显示：
+
+```text
+楼层标签
+Up 按钮
+Down 按钮
+```
+
+点击 5 楼 Up，会提交：
+
+```json
+{
+  "floor": 5,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+这表示：
+
+```text
+有人在 5 楼外面按了上行按钮
+```
+
+#### Cabin 模式
+
+Cabin 模式下，每一层只显示：
+
+```text
+楼层标签
+Select 按钮
+```
+
+点击 12 楼 Select，会提交：
+
+```json
+{
+  "floor": 12,
+  "direction": "idle",
+  "kind": "cabin"
+}
+```
+
+这里 `direction` 传 `"idle"` 是当前模型下的临时处理。
+
+原因是：电梯内部按钮本质上只表达“我要去某一层”，不表达“我要上行还是下行”。但是当前后端 `Request` 结构体仍然要求有 `Direction` 字段，所以先用 `DirectionIdle` 表示“不关心方向”。
+
+#### 改了哪些前端代码
+
+`web/app.js` 中新增：
+
+```js
+let currentRequestKind = "hall";
+```
+
+以及：
+
+```js
+function setRequestKind(kind) {
+  currentRequestKind = kind;
+
+  hallModeButton.classList.toggle("active", kind === "hall");
+  cabinModeButton.classList.toggle("active", kind === "cabin");
+
+  createFloorButtons();
+}
+```
+
+这段代码做了三件事：
+
+```text
+1. 记录当前模式
+2. 更新按钮选中样式
+3. 重新生成楼层按钮
+```
+
+`submitRequest` 也从原来的：
+
+```js
+submitRequest(floor, direction)
+```
+
+改成：
+
+```js
+submitRequest(floor, direction, kind)
+```
+
+这样前端不会再硬编码 `"hall"`，而是根据当前模式提交不同请求类型。
+
+#### 当前 Cabin 模式的限制
+
+真正的电梯内部按钮通常应该属于某一部电梯，例如：
+
+```text
+2 号电梯内部按下 12 楼
+```
+
+这需要请求里带上电梯编号，例如：
+
+```json
+{
+  "elevatorId": 2,
+  "floor": 12,
+  "kind": "cabin"
+}
+```
+
+但当前后端模型还没有 `ElevatorID` 字段，`AddRequest` 也没有按某部电梯添加内部目标楼层的逻辑。
+
+所以当前 Cabin 模式只是一个过渡版本：
+
+```text
+前端可以提交 cabin 类型
+后端仍然把它放入统一 PendingRequests 队列
+临时调度策略仍然分配给 1 号电梯
+```
+
+后续如果要更真实，可以改模型：
+
+```go
+type Request struct {
+  Floor      int
+  Direction  Direction
+  Kind       RequestKind
+  ElevatorID int
+}
+```
+
+或者单独设计：
+
+```text
+POST /api/elevators/{id}/requests
+```
+
+这会比当前版本更接近真实电梯内部按钮。
+
+#### 为什么当前先这样做
+
+当前目标还是“通信调试页”，不是最终电梯 UI。
+
+所以这次改动优先保证：
+
+```text
+能看到 hall/cabin 两种请求的区别
+能理解前端状态如何影响请求体
+不一次性改太多后端模型
+```
+
+后续进入更完整的调度和前端阶段时，再把 Cabin 请求改成绑定具体电梯会更合适。

@@ -18,6 +18,15 @@
       <section class="layout">
         <section class="panel">
           <h2>Floor Requests</h2>
+          <div class="request-mode" aria-label="Request type">
+            <!-- 这两个按钮切换 app.js 里的 currentRequestKind。 -->
+            <button id="hallModeButton" class="mode-button active" type="button">
+              Hall
+            </button>
+            <button id="cabinModeButton" class="mode-button" type="button">
+              Cabin
+            </button>
+          </div>
           <!-- 楼层按钮不手写在 HTML 中，而是由 app.js 按 floorCount 动态生成。 -->
           <div id="floorList" class="floor-list"></div>
         </section>

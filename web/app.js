@@ -12,8 +12,17 @@ const floorList = document.querySelector("#floorList");
 const elevatorList = document.querySelector("#elevatorList");
 const pendingRequests = document.querySelector("#pendingRequests");
 const statusText = document.querySelector("#statusText");
+const hallModeButton = document.querySelector("#hallModeButton");
+const cabinModeButton = document.querySelector("#cabinModeButton");
+
+// 当前前端处于哪种请求模式：
+// - hall：楼层外部按钮，请求包含 up/down 方向。
+// - cabin：电梯内部按钮，请求表示“选择一个目标楼层”。
+let currentRequestKind = "hall";
 
 function createFloorButtons() {
+  floorList.replaceChildren();
+
   // 从高楼层往低楼层创建按钮，这样页面上最高楼层显示在最上面。
   for (let floor = floorCount; floor >= 1; floor -= 1) {
     // document.createElement 会在内存里创建一个新的 DOM 节点。
@@ -25,24 +34,52 @@ function createFloorButtons() {
     label.className = "floor-label";
     label.textContent = `${floor}F`;
 
+    if (currentRequestKind === "cabin") {
+      const selectButton = document.createElement("button");
+      selectButton.className = "wide-button";
+      selectButton.textContent = "Select";
+      // Cabin 请求来自电梯内部，用户只选择目标楼层，不选择上下方向。
+      // 当前后端模型仍要求 Direction 字段，所以先传 idle。
+      selectButton.addEventListener("click", () =>
+        submitRequest(floor, "idle", "cabin"),
+      );
+
+      row.append(label, selectButton);
+      floorList.append(row);
+      continue;
+    }
+
     const upButton = document.createElement("button");
     upButton.textContent = "Up";
     // 最高层不能继续上行，所以禁用 Up 按钮。
     upButton.disabled = floor === floorCount;
     // addEventListener 用来注册用户点击后要执行的代码。
     // 这里的箭头函数会记住当前按钮对应的 floor。
-    upButton.addEventListener("click", () => submitRequest(floor, "up"));
+    upButton.addEventListener("click", () =>
+      submitRequest(floor, "up", "hall"),
+    );
 
     const downButton = document.createElement("button");
     downButton.textContent = "Down";
     // 1 楼不能继续下行，所以禁用 Down 按钮。
     downButton.disabled = floor === 1;
-    downButton.addEventListener("click", () => submitRequest(floor, "down"));
+    downButton.addEventListener("click", () =>
+      submitRequest(floor, "down", "hall"),
+    );
 
     // append 可以一次性追加多个子节点。
     row.append(label, upButton, downButton);
     floorList.append(row);
   }
+}
+
+function setRequestKind(kind) {
+  currentRequestKind = kind;
+
+  hallModeButton.classList.toggle("active", kind === "hall");
+  cabinModeButton.classList.toggle("active", kind === "cabin");
+
+  createFloorButtons();
 }
 
 async function fetchState() {
@@ -56,7 +93,7 @@ async function fetchState() {
   return response.json();
 }
 
-async function submitRequest(floor, direction) {
+async function submitRequest(floor, direction, kind) {
   try {
     // POST /api/request 会在后端创建一个新的乘梯请求。
     const response = await fetch("/api/request", {
@@ -70,7 +107,7 @@ async function submitRequest(floor, direction) {
       body: JSON.stringify({
         floor: floor,
         direction: direction,
-        kind: "hall",
+        kind: kind,
       }),
     });
 
@@ -167,6 +204,8 @@ async function tick() {
 }
 
 // 页面启动流程。
+hallModeButton.addEventListener("click", () => setRequestKind("hall"));
+cabinModeButton.addEventListener("click", () => setRequestKind("cabin"));
 createFloorButtons();
 refreshState();
 // setInterval 每 800ms 调用一次 tick，因此可以看到电梯逐步移动。
