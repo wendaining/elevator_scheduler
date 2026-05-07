@@ -1539,5 +1539,688 @@ json.NewEncoder(w).Encode(response)   // 编码 + 写出一步到位
 ### 当前实现的限制
 
 - `POST /api/request` 只负责添加请求，不会自动推进电梯。
-- 当前还没有 HTTP API 暴露 `Step()`。
-- 后续可以设计 `POST /api/step` 作为调试接口，或者让后端定时调用 `Step()`。
+- 当前已添加临时调试接口 `POST /api/step`，用于同步模型阶段手动推进一次 `Step()`。
+- 后续进入并发模型后，可以取消这个调试接口，改成后端自己定时推进。
+
+## 2026-05-07：建立最小原生前端通信页
+
+本阶段目标：先不用 Vue，使用原生 HTML、CSS、JavaScript 做一个很薄的前端页面，打通下面这条链路：
+
+```text
+点击楼层按钮
+    ↓
+JavaScript 调用 POST /api/request
+    ↓
+Go 后端把请求加入 PendingRequests
+    ↓
+JavaScript 定时调用 POST /api/step 推进模拟
+    ↓
+JavaScript 调用 GET /api/state 读取最新状态
+    ↓
+页面重新渲染电梯状态
+```
+
+这个页面是通信调试页，不是最终工业化前端。它的价值是把前端和后端通信的基本过程看清楚。闭环跑通后，再迁移到 Vue + Vite。
+
+### 本次涉及文件
+
+- `web/index.html`：页面结构。
+- `web/style.css`：页面样式。
+- `web/app.js`：创建按钮、发送请求、读取状态、更新页面。
+- `internal/api/handler.go`：增加静态文件服务和临时 `POST /api/step` 调试接口。
+
+### HTML 负责什么
+
+`web/index.html` 只负责页面结构，不负责业务逻辑。
+
+当前页面里有几个关键节点：
+
+```html
+<div id="floorList" class="floor-list"></div>
+<div id="elevatorList" class="elevator-list"></div>
+<pre id="pendingRequests" class="pending-output">[]</pre>
+<p id="statusText" class="status">Connecting...</p>
+```
+
+这些节点一开始是空容器。后续 JavaScript 会找到它们，再动态填入楼层按钮、电梯卡片和待处理请求。
+
+可以先这样理解：
+
+```text
+HTML 提供容器
+CSS 控制外观
+JavaScript 填充内容并处理交互
+```
+
+### CSS 负责什么
+
+`web/style.css` 只负责视觉布局，例如：
+
+- 页面最大宽度。
+- 三栏布局。
+- 面板边框和间距。
+- 楼层按钮的排列。
+- 电梯状态卡片的排列。
+
+CSS 不负责请求后端，也不保存电梯状态。它只关心“显示出来长什么样”。
+
+### JavaScript 负责什么
+
+`web/app.js` 负责前端行为。当前最重要的函数是：
+
+```js
+createFloorButtons()
+fetchState()
+submitRequest(floor, direction)
+advanceOneStep()
+renderState(state)
+refreshState()
+tick()
+```
+
+#### 创建楼层按钮
+
+```js
+document.createElement("button")
+```
+
+表示创建一个新的按钮元素。
+
+```js
+upButton.addEventListener("click", () => submitRequest(floor, "up"))
+```
+
+表示给按钮绑定点击事件。用户点击按钮时，浏览器会调用 `submitRequest(floor, "up")`。
+
+#### 读取后端状态
+
+```js
+const response = await fetch("/api/state");
+const state = await response.json();
+```
+
+这会发送：
+
+```text
+GET /api/state
+```
+
+后端返回 JSON，前端把 JSON 解析成 JavaScript 对象。
+
+#### 提交楼层请求
+
+```js
+await fetch("/api/request", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    floor,
+    direction,
+    kind: "hall",
+  }),
+});
+```
+
+这会发送：
+
+```text
+POST /api/request
+```
+
+请求体是 JSON，例如：
+
+```json
+{
+  "floor": 5,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+这里的 `JSON.stringify(...)` 是把 JavaScript 对象转换成 JSON 字符串。
+
+#### 渲染页面
+
+```js
+function renderState(state) {
+  elevatorList.replaceChildren();
+
+  for (const elevator of state.elevators) {
+    // create elevator card
+  }
+}
+```
+
+`renderState` 接收后端返回的系统状态，然后重新生成电梯显示卡片。
+
+当前做法很朴素：每次刷新时清空旧内容，再重新创建 DOM。这个方式适合调试页；以后迁移到 Vue 后，Vue 会用响应式系统帮我们更自然地更新页面。
+
+### 为什么加临时 `POST /api/step`
+
+当前后端还没有 goroutine 定时推动电梯运行，所以如果只提交请求，电梯不会自己移动。
+
+为了让页面能看到状态变化，先加一个调试接口：
+
+```text
+POST /api/step
+```
+
+它会调用：
+
+```go
+s.System.Step()
+```
+
+前端每隔 800ms 调用一次：
+
+```js
+setInterval(tick, 800);
+```
+
+`tick()` 做两件事：
+
+```text
+POST /api/step   推进系统一步
+GET /api/state   读取最新状态并渲染
+```
+
+这个接口是同步模拟阶段的调试工具。后续进入并发模型后，可以让后端自己定时推进，前端只负责 `GET /api/state`。
+
+### 后端如何提供前端文件
+
+`internal/api/handler.go` 中增加了：
+
+```go
+mux.Handle("/", http.FileServer(http.Dir("web")))
+```
+
+意思是：把 `web/` 目录作为静态文件目录。
+
+浏览器访问：
+
+```text
+http://localhost:8080/
+```
+
+Go 会返回：
+
+```text
+web/index.html
+```
+
+页面里的：
+
+```html
+<link rel="stylesheet" href="/style.css" />
+<script src="/app.js"></script>
+```
+
+会继续请求：
+
+```text
+GET /style.css
+GET /app.js
+```
+
+Go 的静态文件服务会从 `web/` 目录里找到对应文件并返回。
+
+### 当前限制
+
+- 这是原生前端通信调试页，不是最终 Vue 前端。
+- 页面没有复杂动画。
+- 页面没有调度算法切换。
+- 页面没有组件化。
+- `POST /api/step` 是同步模拟阶段的临时调试接口。
+
+当前只关注一个目标：看懂前端如何通过 HTTP API 驱动后端状态变化，并把状态显示出来。
+
+## 2026-05-07：前端通信页相关问题整理
+
+### 1. 什么是“使用原生 DOM API 和 fetch”
+
+这里其实有两个概念：
+
+```text
+原生 DOM API
+fetch
+```
+
+#### 原生 DOM API
+
+DOM 是 Document Object Model，可以先理解为：浏览器把 HTML 页面解析成了一棵可以被 JavaScript 操作的对象树。
+
+比如 HTML 里有：
+
+```html
+<div id="floorList"></div>
+```
+
+JavaScript 可以用：
+
+```js
+const floorList = document.querySelector("#floorList");
+```
+
+找到这个节点。
+
+也可以用：
+
+```js
+const button = document.createElement("button");
+button.textContent = "Up";
+floorList.append(button);
+```
+
+创建一个新按钮，并放进页面里。
+
+这些 `document.querySelector`、`document.createElement`、`append`、`addEventListener` 都是浏览器内置的 DOM API，不依赖 Vue、React 或其他框架，所以叫“原生 DOM API”。
+
+#### fetch
+
+`fetch` 是浏览器内置的 HTTP 请求 API。
+
+例如：
+
+```js
+const response = await fetch("/api/state");
+const state = await response.json();
+```
+
+它会让浏览器向后端发送：
+
+```text
+GET /api/state
+```
+
+再把后端返回的 JSON 解析成 JavaScript 对象。
+
+所以“使用原生 DOM API 和 fetch”的意思是：
+
+```text
+不用 Vue / React
+直接用浏览器内置能力创建页面元素、监听点击事件、发送 HTTP 请求
+```
+
+当前这样做是为了先看清楚最小前后端通信流程。后续迁移到 Vue 后，Vue 会帮我们更方便地管理 DOM，但 HTTP 请求和数据流本质还是类似的。
+
+### 2. `floorCount` 后续应该从哪里来
+
+当前 `web/app.js` 里写了：
+
+```js
+const floorCount = 20;
+```
+
+这是临时写法。它的问题是：前端和后端各自写了一份楼层数。
+
+后端初始化时是：
+
+```go
+elevator.NewSystem(20, 5)
+```
+
+前端又写：
+
+```js
+const floorCount = 20;
+```
+
+如果以后后端改成 30 层，但前端忘记改，页面就错了。
+
+所以更合理的是：后端作为系统状态的权威来源，前端从：
+
+```text
+GET /api/state
+```
+
+读取：
+
+```json
+{
+  "floorCount": 20
+}
+```
+
+然后根据后端返回的 `floorCount` 生成楼层按钮。
+
+#### 那是否应该用 POST 表单写入后端
+
+这取决于“楼层数是不是用户可以配置的”。
+
+如果只是读取当前系统配置：
+
+```text
+GET /api/state
+```
+
+就够了。
+
+如果后续希望页面提供一个配置表单，例如用户输入：
+
+```text
+楼层数：30
+电梯数：6
+```
+
+然后修改后端系统配置，那确实应该设计一个写入接口，例如：
+
+```text
+PUT /api/config
+```
+
+或者简单一点：
+
+```text
+POST /api/config
+```
+
+请求体可能是：
+
+```json
+{
+  "floorCount": 30,
+  "elevatorCount": 6
+}
+```
+
+所以这里有两个不同场景：
+
+```text
+读取当前楼层数：GET /api/state
+修改系统楼层数：POST/PUT /api/config
+```
+
+当前阶段我们只是展示已有系统状态，不做系统配置页面，所以先从 `GET /api/state` 读取 `floorCount` 更合适。
+
+### 3. `createFloorButtons()` 是不是在手写 HTML
+
+可以这样理解：它是用 JavaScript 动态创建 HTML 元素。
+
+手写 HTML 的方式可能是：
+
+```html
+<div class="floor-row">
+  <span class="floor-label">5F</span>
+  <button>Up</button>
+  <button>Down</button>
+</div>
+```
+
+而 `createFloorButtons()` 做的是同一件事，只是用 JS 写：
+
+```js
+const row = document.createElement("div");
+row.className = "floor-row";
+
+const label = document.createElement("span");
+label.className = "floor-label";
+label.textContent = `${floor}F`;
+
+const upButton = document.createElement("button");
+upButton.textContent = "Up";
+
+row.append(label, upButton, downButton);
+floorList.append(row);
+```
+
+所以它可以理解为：**用 JavaScript 生成 HTML**
+
+为什么这么做？因为楼层有 20 层，如果手写 HTML，就要重复写 20 行楼层结构。用循环可以根据 `floorCount` 自动生成。
+
+后续迁移到 Vue 后，这段逻辑会变成类似：
+
+```html
+<div v-for="floor in floors" :key="floor">
+  ...
+</div>
+```
+
+本质仍然是“根据数据生成页面元素”，只是 Vue 的写法更简洁。
+
+### 4. `async` 和 `await` 在这里的作用
+
+`fetch` 是异步操作，因为浏览器发送 HTTP 请求后，需要等待后端响应。
+
+如果不用异步机制，代码不能立刻拿到后端返回值。
+
+当前代码：
+
+```js
+async function fetchState() {
+  const response = await fetch("/api/state");
+  return response.json();
+}
+```
+
+可以这样读：
+
+```text
+async function
+  表示这个函数里会有异步操作
+
+await fetch("/api/state")
+  等待 HTTP 请求完成
+
+response.json()
+  把响应体解析成 JavaScript 对象
+```
+
+如果没有 `await`：
+
+```js
+const response = fetch("/api/state");
+```
+
+此时 `response` 不是最终的 HTTP 响应，而是一个 Promise。Promise 可以先理解为“未来才会完成的结果”。
+
+所以：
+
+```js
+const response = await fetch("/api/state");
+```
+
+意思是：
+
+```text
+先暂停当前 async 函数
+等 fetch 真的拿到响应后
+再把响应赋值给 response
+```
+
+再看提交请求：
+
+```js
+async function submitRequest(floor, direction) {
+  const response = await fetch("/api/request", {
+    method: "POST",
+    ...
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message);
+  }
+
+  await refreshState();
+}
+```
+
+这里有三个异步点：
+
+1. 等 `POST /api/request` 完成。
+2. 如果失败，等 `response.text()` 读出错误信息。
+3. 成功后，等 `refreshState()` 重新读取状态并渲染页面。
+
+简单记忆：
+
+```text
+async：声明这个函数里可以使用 await
+await：等待一个异步操作完成，再继续执行下一行
+```
+
+### 5. 为什么接入并发模型后，前端就不需要自己 `tick`
+
+当前后端是同步模拟模型。也就是说，后端状态只有在有人调用：
+
+```go
+system.Step()
+```
+
+时才会推进。
+
+如果前端只调用：
+
+```text
+POST /api/request
+```
+
+那么后端只是把请求加入 `PendingRequests`。电梯不会自动移动，因为没有任何后台逻辑在持续调用 `Step()`。
+
+所以当前前端临时做了：
+
+```js
+setInterval(tick, 800);
+```
+
+而 `tick()` 里调用：
+
+```text
+POST /api/step
+GET /api/state
+```
+
+也就是让前端承担了“定时推动系统运行”的角色。
+
+#### 并发模型后会发生什么
+
+后续如果后端接入 goroutine，可以让后端自己运行一个循环：
+
+```go
+go func() {
+  for {
+    system.Step()
+    time.Sleep(800 * time.Millisecond)
+  }
+}()
+```
+
+这样后端自己就会每隔一段时间推进系统状态。
+
+此时前端不需要再调用：
+
+```text
+POST /api/step
+```
+
+前端只需要定时读取状态：
+
+```text
+GET /api/state
+```
+
+也就是说，职责会变成：
+
+```text
+后端 goroutine：负责推动电梯运行
+前端 setInterval：只负责定时读取并展示状态
+```
+
+这就是为什么接入并发模型后，前端不再需要执行“推进系统”的 `tick` 逻辑。更准确地说，前端可能仍然会有定时刷新函数，但它只刷新状态，不再负责让系统前进一步。
+
+当前阶段：
+
+```text
+前端 tick = 推进后端 + 读取状态
+```
+
+并发阶段：
+
+```text
+后端 goroutine = 推进系统
+前端 refresh = 读取状态
+```
+
+### 6. `mux.Handle()` 和 `mux.HandleFunc()` 的区别
+
+它们都用于注册路由，但接收的第二个参数不同。
+
+#### `HandleFunc`
+
+当前 API 路由使用：
+
+```go
+mux.HandleFunc("/api/state", s.handleState)
+```
+
+`HandleFunc` 接收的是一个函数。这个函数长这样：
+
+```go
+func(w http.ResponseWriter, r *http.Request)
+```
+
+例如：
+
+```go
+func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
+  ...
+}
+```
+
+所以：
+
+```text
+HandleFunc = 给我一个函数，我帮你把它当作 HTTP handler
+```
+
+#### `Handle`
+
+静态文件服务使用：
+
+```go
+mux.Handle("/", http.FileServer(http.Dir("web")))
+```
+
+`Handle` 接收的不是普通函数，而是一个实现了 `http.Handler` 接口的对象。
+
+`http.Handler` 接口大概是：
+
+```go
+type Handler interface {
+  ServeHTTP(w http.ResponseWriter, r *http.Request)
+}
+```
+
+`http.FileServer(http.Dir("web"))` 返回的就是一个 `http.Handler`。它内部已经知道如何处理请求、读取文件、返回文件内容。
+
+所以：
+
+```text
+Handle = 给我一个已经实现 ServeHTTP 的 handler 对象
+```
+
+#### 为什么语法差别看起来很大
+
+因为这两种写法面向的对象不同：
+
+```go
+mux.HandleFunc("/api/state", s.handleState)
+```
+
+这里 `s.handleState` 是我们自己写的函数。
+
+```go
+mux.Handle("/", http.FileServer(http.Dir("web")))
+```
+
+这里 `http.FileServer(...)` 是标准库帮我们创建好的 handler 对象。
+
+可以这样记：
+
+```text
+自己写函数处理请求：HandleFunc
+使用现成 handler 对象：Handle
+```
+
+事实上，`HandleFunc` 可以理解为一个便利写法。它把普通函数包装成 `http.Handler`。所以两者不是完全不同的世界，而是同一个 HTTP handler 模型下的两种入口。

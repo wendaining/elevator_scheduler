@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <!-- HTML 负责页面结构：声明编码、移动端视口、标题和 CSS 文件。 -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elevator Scheduler</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <h1>Elevator Scheduler</h1>
+        <!-- JavaScript 会用 #statusText 显示后端连接状态或错误信息。 -->
+        <p id="statusText" class="status">Connecting...</p>
+      </header>
+
+      <section class="layout">
+        <section class="panel">
+          <h2>Floor Requests</h2>
+          <!-- 楼层按钮不手写在 HTML 中，而是由 app.js 按 floorCount 动态生成。 -->
+          <div id="floorList" class="floor-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Elevators</h2>
+          <!-- 电梯状态卡片由 app.js 根据 GET /api/state 返回的数据动态渲染。 -->
+          <div id="elevatorList" class="elevator-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Pending</h2>
+          <!-- pre 会保留换行和缩进，适合暂时展示 JSON 调试信息。 -->
+          <pre id="pendingRequests" class="pending-output">[]</pre>
+        </section>
+      </section>
+    </main>
+
+    <!-- script 放在 body 末尾，确保上面的 DOM 节点已经创建完成。 -->
+    <script src="/app.js"></script>
+  </body>
+</html>

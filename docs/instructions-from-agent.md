@@ -78,16 +78,16 @@
 
 目标：打通“按钮 -> HTTP 请求 -> 后端状态 -> 页面刷新”的闭环。
 
-- [ ] 创建 `web/index.html`
-- [ ] 创建 `web/app.js`
-- [ ] 创建 `web/style.css`
-- [ ] 页面显示 20 层楼的上行 / 下行按钮
-- [ ] 页面显示 5 部电梯的当前楼层和方向
-- [ ] 前端定时请求 `GET /api/state` 刷新状态
-- [ ] 点击楼层按钮时发送 `POST /api/request`
-- [ ] 暂时不追求动画，先保证交互链路可靠
-- [ ] 在 `docs/record.md` 记录第一次前后端打通的过程
-- [ ] 做一次小提交，例如 `feat: add basic elevator web ui`
+- [x] 创建 `web/index.html`
+- [x] 创建 `web/app.js`
+- [x] 创建 `web/style.css`
+- [x] 页面显示 20 层楼的上行 / 下行按钮
+- [x] 页面显示 5 部电梯的当前楼层和方向
+- [x] 前端定时请求 `GET /api/state` 刷新状态
+- [x] 点击楼层按钮时发送 `POST /api/request`
+- [x] 暂时不追求动画，先保证交互链路可靠
+- [x] 在 `docs/record.md` 记录第一次前后端打通的过程
+- [x] 做一次小提交，例如 `feat: add basic elevator web ui`
 
 ## 6. 加入更明确的调度算法
 
