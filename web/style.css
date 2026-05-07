@@ -58,6 +58,12 @@ button:hover {
   margin: 0;
 }
 
+.status-group {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
 /* 主布局：楼层按钮、电梯状态、待处理请求三栏。 */
 .layout {
   align-items: start;

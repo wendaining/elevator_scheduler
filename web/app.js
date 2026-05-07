@@ -12,6 +12,7 @@ const floorList = document.querySelector("#floorList");
 const elevatorList = document.querySelector("#elevatorList");
 const pendingRequests = document.querySelector("#pendingRequests");
 const statusText = document.querySelector("#statusText");
+const schedulerText = document.querySelector("#schedulerText");
 const hallModeButton = document.querySelector("#hallModeButton");
 const cabinModeButton = document.querySelector("#cabinModeButton");
 
@@ -136,6 +137,8 @@ async function advanceOneStep() {
 }
 
 function renderState(state) {
+  schedulerText.textContent = `Scheduler: ${state.schedulerName || "-"}`;
+
   // 渲染最新状态前，先移除所有旧的电梯卡片。
   // 对这个临时原生 JS 页面来说，这种做法简单且足够。
   elevatorList.replaceChildren();

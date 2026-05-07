@@ -11,8 +11,11 @@
     <main class="app">
       <header class="topbar">
         <h1>Elevator Scheduler</h1>
-        <!-- JavaScript 会用 #statusText 显示后端连接状态或错误信息。 -->
-        <p id="statusText" class="status">Connecting...</p>
+        <div class="status-group">
+          <p id="schedulerText" class="status">Scheduler: -</p>
+          <!-- JavaScript 会用 #statusText 显示后端连接状态或错误信息。 -->
+          <p id="statusText" class="status">Connecting...</p>
+        </div>
       </header>
 
       <section class="layout">
