@@ -4035,3 +4035,129 @@ ScanScheduler.Assign
 #### 一句话总结
 
 `Assign()` 负责把 `System` 的 `PendingRequests` 分配给一个**特定的电梯**的 `targetFloors[]`，之后 `system.go` 里面的 `stepElevator()` 才会根据这个去移动电梯，**这一步就和调度算法无关了**。
+
+### 如何判断一部电梯是否空闲
+
+当前代码里，判断一部电梯是否可以接收新请求，主要看：
+
+```go
+len(e.TargetFloors) == 0
+```
+
+也就是当前实现里的：
+
+```go
+func canAcceptRequest(e Elevator) bool {
+	return !e.EmergencyStop && len(e.TargetFloors) == 0
+}
+```
+
+这个判断比单纯看：
+
+```go
+e.Direction == DirectionIdle
+```
+
+更可靠。
+
+#### 为什么不只看 `DirectionIdle`
+
+`DirectionIdle` 表示电梯当前“不在移动”。但“不在移动”不一定等于“没有任务”。
+
+例如后续可能出现这种状态：
+
+```text
+Direction = idle
+DoorOpen = true
+TargetFloors = [8]
+```
+
+这表示电梯正在某层开门停靠，但后面还有 8 楼这个目标。它虽然当前方向是 `idle`，但并不是真的空闲。
+
+也可能出现：
+
+```text
+Direction = idle
+TargetFloors = [5]
+```
+
+这表示电梯刚被分配了目标楼层，但还没来得及在下一次 `Step()` 里移动。它也不是空闲。
+
+所以：
+
+```text
+DirectionIdle 只能说明当前没有移动
+不能保证没有任务
+```
+
+#### 为什么看 `TargetFloors`
+
+`TargetFloors` 表示这部电梯还有没有待完成任务。
+
+```text
+len(TargetFloors) == 0
+  没有目标楼层，当前没有任务
+
+len(TargetFloors) > 0
+  还有目标楼层，正在服务任务或即将服务任务
+```
+
+所以“是否空闲”的核心应该是：
+
+```go
+len(e.TargetFloors) == 0
+```
+
+同时还要排除紧急停止：
+
+```go
+!e.EmergencyStop
+```
+
+因为紧急停止的电梯即使没有目标楼层，也不应该接新任务。
+
+#### 是否要看 `DoorOpen`
+
+当前简单模型里先不看 `DoorOpen`。
+
+如果出现：
+
+```text
+DoorOpen = true
+TargetFloors = []
+```
+
+它是否能接新请求，有两种解释：
+
+```text
+简化模型：可以接，因为没有任务
+更真实模型：等门关了再接
+```
+
+当前阶段为了保持调度逻辑简单，先使用：
+
+```go
+!e.EmergencyStop && len(e.TargetFloors) == 0
+```
+
+后续如果想更真实，可以改成：
+
+```go
+func (e Elevator) IsAvailable() bool {
+	return !e.EmergencyStop &&
+		!e.DoorOpen &&
+		len(e.TargetFloors) == 0
+}
+```
+
+#### 当前结论
+
+当前阶段判断电梯是否空闲，推荐使用：
+
+```go
+func canAcceptRequest(e Elevator) bool {
+	return !e.EmergencyStop && len(e.TargetFloors) == 0
+}
+```
+
+因为 `TargetFloors` 比 `Direction` 更能表达“这部电梯有没有任务”。

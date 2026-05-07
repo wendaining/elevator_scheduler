@@ -100,7 +100,7 @@
 - [x] 在状态接口里暴露当前使用的调度算法名称
 - [x] 在前端显示当前调度策略
 - [x] 在 `docs/record.md` 记录算法思路、优点、缺点和一个具体例子
-- [ ] 做一次小提交，例如 `feat: add nearest elevator scheduler`
+- [x] 做一次小提交，例如 `feat: add nearest elevator scheduler`
 
 ## 7. 引入并发模型
 
