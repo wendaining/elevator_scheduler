@@ -1,7 +1,5 @@
 package elevator
 
-import "fmt"
-
 // NearestIdleScheduler 是留给你继续完成的“最近空闲电梯优先”骨架。
 //
 // 目标行为：
@@ -57,15 +55,4 @@ func (NearestIdleScheduler) Assign(system *System) bool {
 		request.Floor,
 	)
 	return true
-}
-
-func NewScheduler(name string) (Scheduler, error) {
-	switch name {
-	case "first-available":
-		return FirstAvailableScheduler{}, nil
-	case "nearest-idle":
-		return NearestIdleScheduler{}, nil
-	default:
-		return nil, fmt.Errorf("unknown scheduler %q", name)
-	}
 }

@@ -1,5 +1,7 @@
 package elevator
 
+import "fmt"
+
 // Scheduler 是所有调度算法都要实现的统一接口。
 //
 // Go 语法说明：
@@ -9,4 +11,15 @@ package elevator
 type Scheduler interface {
 	Name() string
 	Assign(system *System) bool
+}
+
+func NewScheduler(name string) (Scheduler, error) {
+	switch name {
+	case "first-available":
+		return FirstAvailableScheduler{}, nil
+	case "nearest-idle":
+		return NearestIdleScheduler{}, nil
+	default:
+		return nil, fmt.Errorf("unknown scheduler %q", name)
+	}
 }
