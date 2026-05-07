@@ -126,23 +126,23 @@
 - [x] 所有请求时间都使用 tick 记录，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
 - [x] 预留可配置时间参数，例如跨一层需要多少 tick、开门基础时间、每上 / 下一名乘客额外消耗多少 tick
 - [x] 在 `Snapshot()` / `GET /api/state` 中暴露当前 tick，方便前端同步显示
-- [ ] 做一次小提交，例如 `feat: add simulation tick clock`
+- [x] 做一次小提交，例如 `feat: add simulation tick clock`
 
 ### 6.5.2 请求模型重构
 
 目标：让请求从“临时队列元素”升级为系统内可追踪的对象。
 
-- [ ] 定义 `RequestStatus`，至少包含 `pending`、`assigned`、`done`
-- [ ] 给 `Request` 增加唯一 ID，例如 `ID int64`
-- [ ] 给 `Request` 增加 tick 字段，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
-- [ ] 给 `Request` 增加 `AssignedElevatorID`，用来记录请求被分配给哪部电梯
-- [ ] 在 `System` 中增加 `Requests []Request`
-- [ ] 删除或停止使用 `PendingRequests []Request` 作为状态字段
-- [ ] 如果需要 pending 请求，使用辅助函数从 `Requests` 中筛选 `Status == RequestPending`
-- [ ] 修改 `AddRequest`：创建请求 ID，设置 `CreatedTick = CurrentTick`，初始状态为 `pending`
-- [ ] 修改 `Snapshot()` 和 API 返回，确保可以观察所有请求及其状态
-- [ ] 写测试验证请求创建、分配、完成时状态和 tick 正确变化
-- [ ] 在 `docs/record.md` 记录：为什么请求不能在分配时从系统里消失
+- [x] 定义 `RequestStatus`，至少包含 `pending`、`assigned`、`done`
+- [x] 给 `Request` 增加唯一 ID，例如 `ID int64`
+- [x] 给 `Request` 增加 tick 字段，例如 `CreatedTick`、`AssignedTick`、`CompletedTick`
+- [x] 给 `Request` 增加 `AssignedElevatorID`，用来记录请求被分配给哪部电梯
+- [x] 在 `System` 中增加 `Requests []Request`
+- [x] 删除 `PendingRequests []Request` 作为状态字段
+- [x] 添加辅助函数从 `Requests` 中筛选 `Status == RequestPending` 和另外两个状态
+- [x] 修改 `AddRequest`：创建请求 ID，设置 `CreatedTick = CurrentTick`，初始状态为 `pending`
+- [x] 修改 `Snapshot()` 和 API 返回，确保可以观察所有请求及其状态
+- [x] 写测试验证请求创建、分配、完成时状态和 tick 正确变化
+- [x] 在 `docs/record.md` 记录：为什么请求不能在分配时从系统里消失，为什么本项目使用离散 tick，而不是 `time.Time`
 - [ ] 做一次小提交，例如 `feat: track requests by status`
 
 ### 6.5.3 楼层模型

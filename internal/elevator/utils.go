@@ -15,6 +15,28 @@ func canAcceptRequest(e Elevator) bool {
 	return !e.EmergencyStop && len(e.TargetFloors) == 0
 }
 
+func firstPendingRequestIndex(s *System) int {
+	indices := requestIndicesByStatus(s, RequestPending)
+	if len(indices) == 0 {
+		return -1
+	}
+	return indices[0]
+}
+
+func hasPendingRequests(s *System) bool {
+	return firstPendingRequestIndex(s) != -1
+}
+
+func requestIndicesByStatus(s *System, status RequestStatus) []int {
+	indices := []int{}
+	for i, request := range s.Requests {
+		if request.Status == status {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
 func floorDistance(a int, b int) int {
 	if a > b {
 		return a - b

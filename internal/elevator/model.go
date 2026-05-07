@@ -8,11 +8,20 @@ package elevator
 //     并防止意外混用不相关的字符串。
 type Direction string
 
-// 这些常量是系统第一版使用的唯一方向值。
+// 这些常量是系统使用的唯一方向值。
 const (
 	DirectionIdle Direction = "idle"
 	DirectionUp   Direction = "up"
 	DirectionDown Direction = "down"
+)
+
+// 记录每个请求的状态
+type RequestStatus string
+
+const (
+	RequestPending  RequestStatus = "pending"
+	RequestAssigned RequestStatus = "assigned"
+	RequestDone     RequestStatus = "done"
 )
 
 // RequestKind 描述请求的来源。
@@ -34,15 +43,17 @@ const (
 //   - 每个字段后面的文本，如 `json:"floor"`，是一个 struct tag。
 //     它告诉 Go 的 JSON 编码器在返回 API 数据时使用哪个键名。
 type Request struct {
-	Floor     int         `json:"floor"`
-	Direction Direction   `json:"direction"`
-	Kind      RequestKind `json:"kind"`
+	ID        int64         `json:"id"`
+	Floor     int           `json:"floor"`
+	Direction Direction     `json:"direction"`
+	Kind      RequestKind   `json:"kind"`
+	Status    RequestStatus `json:"status"`
 
 	// CreatedTick 记录请求是在第几个系统时间片创建的。
-	// 后续重构为完整 Requests 模型后，会继续使用 tick 记录分配和完成时间。
-	CreatedTick   int `json:"createdTick"`
-	AssignedTick  int `json:"assignedTick"`
-	CompletedTick int `json:"completedTick"`
+	CreatedTick        int `json:"createdTick"`
+	AssignedTick       int `json:"assignedTick"`
+	CompletedTick      int `json:"completedTick"`
+	AssignedElevatorID int `json:"assignedElevatorId"`
 }
 
 // Elevator 表示一部电梯轿厢。
@@ -56,8 +67,11 @@ type Elevator struct {
 	ScanDirection Direction `json:"scanDirection"`
 	DoorOpen      bool      `json:"doorOpen"`
 	// TargetFloors 是此电梯当前的简单任务列表。
-	TargetFloors  []int `json:"targetFloors"`
-	EmergencyStop bool  `json:"emergencyStop"`
+	TargetFloors []int `json:"targetFloors"`
+	// TargetRequestIDs 临时和 TargetFloors 按下标对齐，用来在到站时完成对应请求。
+	// 后续 6.5.4 会用 StopPlan 替代这两个平行切片。
+	TargetRequestIDs []int64 `json:"targetRequestIds"`
+	EmergencyStop    bool    `json:"emergencyStop"`
 }
 
 // System 表示整个电梯调度系统。
@@ -79,12 +93,15 @@ type System struct {
 	// Elevators 存储大楼中的所有电梯轿厢。
 	Elevators []Elevator `json:"elevators"`
 
-	// PendingRequests 存储尚未完全服务的请求。
-	PendingRequests []Request `json:"pendingRequests"`
+	// Requests 存储所有创建过且仍需展示/统计的请求。
+	// 请求是否待分配、已分配或已完成，由 Request.Status 表示。
+	Requests []Request `json:"requests"`
 
 	// SchedulerName 会暴露给 API 和前端，方便观察当前调度策略。
 	SchedulerName string `json:"schedulerName"`
 
 	// scheduler 是真正执行调度逻辑的对象。字段名小写，所以 JSON 不会暴露它。
 	scheduler Scheduler
+
+	nextRequestID int64
 }

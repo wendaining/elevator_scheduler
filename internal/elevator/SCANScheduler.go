@@ -21,7 +21,7 @@ func (SCANScheduler) Name() string {
 }
 
 func (SCANScheduler) Assign(s *System) bool {
-	if len(s.PendingRequests) == 0 || len(s.Elevators) == 0 {
+	if !hasPendingRequests(s) || len(s.Elevators) == 0 {
 		return false
 	}
 
@@ -33,7 +33,11 @@ func (SCANScheduler) Assign(s *System) bool {
 }
 
 func assignAlongTheWay(s *System) bool {
-	for requestIndex, request := range s.PendingRequests {
+	for requestIndex, request := range s.Requests {
+		if request.Status != RequestPending {
+			continue
+		}
+
 		bestElevatorIndex := -1
 		bestDistance := 0
 
@@ -56,8 +60,7 @@ func assignAlongTheWay(s *System) bool {
 		}
 
 		elevator := &s.Elevators[bestElevatorIndex]
-		insertTargetFloor(elevator, request.Floor)
-		s.PendingRequests = removeRequestAt(s.PendingRequests, requestIndex)
+		assignSCANRequest(s, elevator, requestIndex)
 		return true
 	}
 
@@ -70,7 +73,11 @@ func assignToIdleElevator(s *System) bool {
 	bestPriority := 0
 	bestDistance := 0
 
-	for requestIndex, request := range s.PendingRequests {
+	for requestIndex, request := range s.Requests {
+		if request.Status != RequestPending {
+			continue
+		}
+
 		for elevatorIndex := range s.Elevators {
 			elevator := &s.Elevators[elevatorIndex]
 			if !canAcceptRequest(*elevator) {
@@ -96,14 +103,22 @@ func assignToIdleElevator(s *System) bool {
 		return false
 	}
 
-	request := s.PendingRequests[bestRequestIndex]
+	request := s.Requests[bestRequestIndex]
 	elevator := &s.Elevators[bestElevatorIndex]
 	if bestPriority > 0 {
 		alignIdleElevatorScanDirection(elevator, request.Floor)
 	}
-	insertTargetFloor(elevator, request.Floor)
-	s.PendingRequests = removeRequestAt(s.PendingRequests, bestRequestIndex)
+	assignSCANRequest(s, elevator, bestRequestIndex)
 	return true
+}
+
+func assignSCANRequest(s *System, elevator *Elevator, requestIndex int) {
+	request := &s.Requests[requestIndex]
+	request.Status = RequestAssigned
+	request.AssignedTick = s.CurrentTick
+	request.AssignedElevatorID = elevator.ID
+
+	insertTargetRequest(elevator, request.Floor, request.ID)
 }
 
 func canTakeRequestInSCAN(e Elevator, request Request) bool {
@@ -146,26 +161,26 @@ func alignIdleElevatorScanDirection(e *Elevator, requestFloor int) {
 	e.ScanDirection = DirectionUp
 }
 
-func insertTargetFloor(e *Elevator, floor int) {
-	if containsFloor(e.TargetFloors, floor) {
-		return
-	}
-
+func insertTargetRequest(e *Elevator, floor int, requestID int64) {
 	e.TargetFloors = append(e.TargetFloors, floor)
-	sortTargetFloors(e)
+	e.TargetRequestIDs = append(e.TargetRequestIDs, requestID)
+	sortTargetFloorsAndRequests(e)
 }
 
-func sortTargetFloors(e *Elevator) {
+func sortTargetFloorsAndRequests(e *Elevator) {
 	for i := 1; i < len(e.TargetFloors); i++ {
-		value := e.TargetFloors[i]
+		floor := e.TargetFloors[i]
+		requestID := e.TargetRequestIDs[i]
 		j := i - 1
 
-		for j >= 0 && shouldMoveTargetBefore(value, e.TargetFloors[j], e.ScanDirection) {
+		for j >= 0 && shouldMoveTargetBefore(floor, e.TargetFloors[j], e.ScanDirection) {
 			e.TargetFloors[j+1] = e.TargetFloors[j]
+			e.TargetRequestIDs[j+1] = e.TargetRequestIDs[j]
 			j--
 		}
 
-		e.TargetFloors[j+1] = value
+		e.TargetFloors[j+1] = floor
+		e.TargetRequestIDs[j+1] = requestID
 	}
 }
 

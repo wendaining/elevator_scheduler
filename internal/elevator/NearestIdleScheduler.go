@@ -3,7 +3,7 @@ package elevator
 // NearestIdleScheduler 是留给你继续完成的“最近空闲电梯优先”骨架。
 //
 // 目标行为：
-//   - 取最早的 PendingRequest。
+//   - 取最早的 pending request。
 //   - 在所有空闲且未紧急停止的电梯中，找到距离请求楼层最近的电梯。
 //   - 把请求楼层加入那部电梯的 TargetFloors。
 type NearestIdleScheduler struct{}
@@ -13,13 +13,14 @@ func (NearestIdleScheduler) Name() string {
 }
 
 func (NearestIdleScheduler) Assign(s *System) bool {
-	if len(s.PendingRequests) == 0 || len(s.Elevators) == 0 {
+	requestIndex := firstPendingRequestIndex(s)
+	if requestIndex == -1 || len(s.Elevators) == 0 {
 		return false
 	}
 
-	request := s.PendingRequests[0] // 取最早的 request
-	bestIndex := -1                 // 目标电梯序号
-	bestDistance := 0               // 距离的最近值
+	request := s.Requests[requestIndex] // 取最早的 pending request
+	bestIndex := -1                     // 目标电梯序号
+	bestDistance := 0                   // 距离的最近值
 
 	for i, elevator := range s.Elevators { // 下标和对象同时遍历
 		if !canAcceptRequest(elevator) {
@@ -49,10 +50,6 @@ func (NearestIdleScheduler) Assign(s *System) bool {
 		return false
 	}
 
-	s.PendingRequests = s.PendingRequests[1:]
-	s.Elevators[bestIndex].TargetFloors = append(
-		s.Elevators[bestIndex].TargetFloors,
-		request.Floor,
-	)
+	s.assignRequestToElevator(requestIndex, bestIndex)
 	return true
 }

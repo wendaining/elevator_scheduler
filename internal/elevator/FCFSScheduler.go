@@ -9,17 +9,16 @@ func (FCFSScheduler) Name() string {
 }
 
 func (FCFSScheduler) Assign(s *System) bool {
-	if len(s.PendingRequests) == 0 || len(s.Elevators) == 0 {
+	requestIndex := firstPendingRequestIndex(s)
+	if requestIndex == -1 || len(s.Elevators) == 0 {
 		return false
 	}
 	// 取出系统中 pending requests 里面第一个请求
-	request := s.PendingRequests[0]
 	for i, elevator := range s.Elevators {
 		if !canAcceptRequest(elevator) {
 			continue
 		}
-		s.PendingRequests = s.PendingRequests[1:]
-		s.Elevators[i].TargetFloors = append(s.Elevators[i].TargetFloors, request.Floor)
+		s.assignRequestToElevator(requestIndex, i)
 		return true
 	}
 	return false

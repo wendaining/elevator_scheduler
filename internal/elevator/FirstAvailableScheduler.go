@@ -10,7 +10,8 @@ func (FirstAvailableScheduler) Name() string {
 }
 
 func (FirstAvailableScheduler) Assign(system *System) bool {
-	if len(system.PendingRequests) == 0 || len(system.Elevators) == 0 {
+	requestIndex := firstPendingRequestIndex(system)
+	if requestIndex == -1 || len(system.Elevators) == 0 {
 		return false
 	}
 
@@ -19,8 +20,6 @@ func (FirstAvailableScheduler) Assign(system *System) bool {
 		return false
 	}
 
-	request := system.PendingRequests[0]
-	system.PendingRequests = system.PendingRequests[1:]
-	firstElevator.TargetFloors = append(firstElevator.TargetFloors, request.Floor)
+	system.assignRequestToElevator(requestIndex, 0)
 	return true
 }

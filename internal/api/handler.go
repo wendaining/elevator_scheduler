@@ -82,7 +82,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request kind", http.StatusBadRequest)
 		return
 	}
-	if err := s.System.AddRequest(request.Floor, request.Direction, request.Kind); err != nil {
+	createdRequest, err := s.System.AddRequest(request.Floor, request.Direction, request.Kind)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -90,6 +91,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	response := map[string]any{
 		"status":      "accepted",
 		"currentTick": s.System.CurrentTick,
+		"request":     createdRequest,
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

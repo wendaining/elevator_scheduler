@@ -19,13 +19,14 @@ func NewSystem(floors int, elevatorCount int) (*System, error) {
 	elevators := make([]Elevator, elevatorCount)
 	for i := range elevators {
 		elevators[i] = Elevator{
-			ID:            i + 1,
-			CurrentFloor:  1,
-			Direction:     DirectionIdle,
-			ScanDirection: DirectionUp,
-			DoorOpen:      false,
-			TargetFloors:  []int{},
-			EmergencyStop: false,
+			ID:               i + 1,
+			CurrentFloor:     1,
+			Direction:        DirectionIdle,
+			ScanDirection:    DirectionUp,
+			DoorOpen:         false,
+			TargetFloors:     []int{},
+			TargetRequestIDs: []int64{},
+			EmergencyStop:    false,
 		}
 	}
 
@@ -38,33 +39,40 @@ func NewSystem(floors int, elevatorCount int) (*System, error) {
 		DoorBaseTicks:    2,
 		TickPerPassenger: 1,
 		Elevators:        elevators,
-		PendingRequests:  []Request{},
+		Requests:         []Request{},
 		SchedulerName:    scheduler.Name(),
 		scheduler:        scheduler,
+		nextRequestID:    1,
 	}, nil
 }
 
-// AddRequest 向系统添加一个新的乘梯请求。先校验参数是否合法，再将请求追加到
-// PendingRequests 末尾。
-func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) error {
+// AddRequest 向系统添加一个新的乘梯请求。先校验参数是否合法，再将请求保存到
+// Requests 中，并用 Status 标记它当前处于 pending 状态。
+func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*Request, error) {
 	if floor < 1 || floor > s.FloorCount {
-		return fmt.Errorf("floor must be between 1 and %d, got %d", s.FloorCount, floor)
+		return nil, fmt.Errorf("floor must be between 1 and %d, got %d", s.FloorCount, floor)
 	}
 	if !IsValidDirection(direction) {
-		return fmt.Errorf("direction must be up, down, or idle, got %s", direction)
+		return nil, fmt.Errorf("direction must be up, down, or idle, got %s", direction)
 	}
 	if !IsValidRequestKind(kind) {
-		return fmt.Errorf("kind must be hall or cabin, got %s", kind)
+		return nil, fmt.Errorf("kind must be hall or cabin, got %s", kind)
 	}
-	s.PendingRequests = append(s.PendingRequests, Request{
-		Floor:         floor,
-		Direction:     direction,
-		Kind:          kind,
-		CreatedTick:   s.CurrentTick,
-		AssignedTick:  0,
-		CompletedTick: 0,
-	})
-	return nil
+
+	request := Request{
+		ID:                 s.nextRequestID,
+		Floor:              floor,
+		Direction:          direction,
+		Kind:               kind,
+		Status:             RequestPending,
+		CreatedTick:        s.CurrentTick,
+		AssignedTick:       0,
+		CompletedTick:      0,
+		AssignedElevatorID: 0,
+	}
+	s.nextRequestID++
+	s.Requests = append(s.Requests, request)
+	return &s.Requests[len(s.Requests)-1], nil
 }
 
 // SetScheduler 根据名称切换调度算法。
@@ -102,7 +110,7 @@ func (s *System) Step() error {
 		log.Println("assigned one request")
 	}
 	for i := range s.Elevators {
-		stepElevator(&s.Elevators[i])
+		stepElevator(s, &s.Elevators[i])
 	}
 
 	return nil
@@ -110,7 +118,7 @@ func (s *System) Step() error {
 
 // stepElevator 推进单部电梯一个时间片：每次最多向目标楼层移动一层，
 // 到达目标楼层后开门并移除该目标。如果电梯处于紧急停止状态，则保持不动。
-func stepElevator(e *Elevator) {
+func stepElevator(s *System, e *Elevator) {
 	// 紧急停止状态下不移动
 	if e.EmergencyStop {
 		e.Direction = DirectionIdle
@@ -141,6 +149,33 @@ func stepElevator(e *Elevator) {
 	} else { // 已到达目标楼层：开门，移除该目标
 		e.Direction = DirectionIdle
 		e.DoorOpen = true
+		if len(e.TargetRequestIDs) > 0 {
+			s.completeRequest(e.TargetRequestIDs[0])
+			e.TargetRequestIDs = e.TargetRequestIDs[1:]
+		}
 		e.TargetFloors = e.TargetFloors[1:]
+	}
+}
+
+func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
+	request := &s.Requests[requestIndex]
+	elevator := &s.Elevators[elevatorIndex]
+
+	request.Status = RequestAssigned
+	request.AssignedTick = s.CurrentTick
+	request.AssignedElevatorID = elevator.ID
+
+	elevator.TargetFloors = append(elevator.TargetFloors, request.Floor)
+	elevator.TargetRequestIDs = append(elevator.TargetRequestIDs, request.ID)
+}
+
+func (s *System) completeRequest(requestID int64) {
+	for i := range s.Requests {
+		if s.Requests[i].ID != requestID {
+			continue
+		}
+		s.Requests[i].Status = RequestDone
+		s.Requests[i].CompletedTick = s.CurrentTick
+		return
 	}
 }

@@ -4705,3 +4705,180 @@ Elevator 有 StopPlan 列表
 ```
 
 这样实现出来的算法不一定是“所有场景数学最优”，但它会更接近真实电梯控制，也更容易在课程报告里解释清楚为什么合理。
+
+### 2026-05-07：完成 6.5.2 请求状态模型重构
+
+本次重构把请求从“临时 pending 队列里的元素”升级成了系统里的长期对象。
+
+之前的核心状态是：
+
+```go
+PendingRequests []Request
+```
+
+调度器从里面取出一个请求后，请求就会从系统状态里消失。这样无法继续追踪它什么时候被分配、什么时候真正完成。
+
+现在的核心状态改成：
+
+```go
+Requests []Request
+```
+
+每个请求自己带状态：
+
+```go
+const (
+	RequestPending  RequestStatus = "pending"
+	RequestAssigned RequestStatus = "assigned"
+	RequestDone     RequestStatus = "done"
+)
+```
+
+这表示：
+
+```text
+pending
+  请求已经创建，但还没有分配给电梯。
+
+assigned
+  请求已经分配给某部电梯，但电梯还没到达对应楼层。
+
+done
+  电梯已经到达楼层并完成这个请求。
+```
+
+#### Request 新增字段
+
+现在 `Request` 里新增了：
+
+```go
+ID int64
+Status RequestStatus
+CreatedTick int
+AssignedTick int
+CompletedTick int
+AssignedElevatorID int
+```
+
+这些字段的作用是：
+
+```text
+ID
+  唯一标识一个请求，方便调试、测试和后续 StopPlan 引用。
+
+Status
+  表示请求当前处于 pending / assigned / done 哪个阶段。
+
+CreatedTick
+  请求创建时的系统时间片。
+
+AssignedTick
+  请求被调度器分配给电梯时的系统时间片。
+
+CompletedTick
+  电梯真正到站并完成请求时的系统时间片。
+
+AssignedElevatorID
+  记录请求被哪部电梯接收。
+```
+
+#### 为什么继续使用离散 tick
+
+这里仍然不用 `time.Time`，因为本项目现在是离散模拟系统。
+
+真实时间关心的是“现在是几点几分几秒”。但电梯调度模拟更关心：
+
+```text
+第几个系统时间片创建请求
+第几个系统时间片分配请求
+第几个系统时间片完成请求
+中间相差多少个时间片
+```
+
+因此：
+
+```text
+等待时间 = AssignedTick - CreatedTick
+完成耗时 = CompletedTick - CreatedTick
+```
+
+这比真实时间更适合做可控测试。测试里连续调用 `Step()`，就能精确知道 tick 如何变化。
+
+#### 调度器现在如何取 pending 请求
+
+现在调度器不再读取 `PendingRequests` 字段。
+
+如果需要找 pending 请求，会从 `Requests` 里筛选：
+
+```go
+request.Status == RequestPending
+```
+
+当前辅助函数包括：
+
+```go
+firstPendingRequestIndex(s)
+hasPendingRequests(s)
+requestIndicesByStatus(s, status)
+```
+
+这样 `Requests` 是事实来源，pending / assigned / done 都只是从事实来源里筛选出来的状态视图。
+
+#### 临时的 `TargetRequestIDs`
+
+当前还没有完成 6.5.4 的 `StopPlan`，所以电梯仍然保留：
+
+```go
+TargetFloors []int
+```
+
+为了能在到站时把对应请求标记为 `done`，临时增加了：
+
+```go
+TargetRequestIDs []int64
+```
+
+它和 `TargetFloors` 按下标对齐：
+
+```text
+TargetFloors     = [4, 8]
+TargetRequestIDs = [1, 3]
+```
+
+含义是：
+
+```text
+先去 4 楼，完成 1 号请求
+再去 8 楼，完成 3 号请求
+```
+
+这不是最终形态。后续 6.5.4 会用 `StopPlan` 替代这两个平行切片，因为平行切片容易维护出错，也无法表达同一楼层多个上下客动作。
+
+#### 本阶段完成后的状态变化
+
+创建请求时：
+
+```text
+Status = pending
+CreatedTick = CurrentTick
+AssignedTick = 0
+CompletedTick = 0
+AssignedElevatorID = 0
+```
+
+调度器分配请求时：
+
+```text
+Status = assigned
+AssignedTick = CurrentTick
+AssignedElevatorID = 电梯 ID
+```
+
+电梯到达目标楼层时：
+
+```text
+Status = done
+CompletedTick = CurrentTick
+```
+
+这一步之后，系统已经可以观察请求从创建到完成的完整生命周期。后续就可以基于这些字段计算等待时间、完成时间，并为 cost 函数预留“等待时间补偿”能力。
