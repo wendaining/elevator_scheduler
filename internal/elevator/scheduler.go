@@ -19,6 +19,8 @@ func NewScheduler(name string) (Scheduler, error) {
 		return FirstAvailableScheduler{}, nil
 	case "nearest-idle":
 		return NearestIdleScheduler{}, nil
+	case "fcfs":
+		return FCFSScheduler{}, nil
 	default:
 		return nil, fmt.Errorf("unknown scheduler %q", name)
 	}

@@ -12,16 +12,16 @@ func (NearestIdleScheduler) Name() string {
 	return "nearest-idle"
 }
 
-func (NearestIdleScheduler) Assign(system *System) bool {
-	if len(system.PendingRequests) == 0 || len(system.Elevators) == 0 {
+func (NearestIdleScheduler) Assign(s *System) bool {
+	if len(s.PendingRequests) == 0 || len(s.Elevators) == 0 {
 		return false
 	}
 
-	request := system.PendingRequests[0] // 取最早的 request
-	bestIndex := -1                      // 目标电梯序号
-	bestDistance := 0                    // 距离的最近值
+	request := s.PendingRequests[0] // 取最早的 request
+	bestIndex := -1                 // 目标电梯序号
+	bestDistance := 0               // 距离的最近值
 
-	for i, elevator := range system.Elevators { // 下标和对象同时遍历
+	for i, elevator := range s.Elevators { // 下标和对象同时遍历
 		if !canAcceptRequest(elevator) {
 			continue
 		}
@@ -33,8 +33,8 @@ func (NearestIdleScheduler) Assign(system *System) bool {
 			bestDistance = distance
 		}
 		if distance == bestDistance {
-			numTargetNow := len(system.Elevators[bestIndex].TargetFloors)
-			numTargetCandidate := len(system.Elevators[i].TargetFloors)
+			numTargetNow := len(s.Elevators[bestIndex].TargetFloors)
+			numTargetCandidate := len(s.Elevators[i].TargetFloors)
 			if numTargetNow >= numTargetCandidate {
 				if numTargetNow == numTargetCandidate {
 					bestIndex = min(i, bestIndex) // 目标数量相同时选择编号小的
@@ -49,9 +49,9 @@ func (NearestIdleScheduler) Assign(system *System) bool {
 		return false
 	}
 
-	system.PendingRequests = system.PendingRequests[1:]
-	system.Elevators[bestIndex].TargetFloors = append(
-		system.Elevators[bestIndex].TargetFloors,
+	s.PendingRequests = s.PendingRequests[1:]
+	s.Elevators[bestIndex].TargetFloors = append(
+		s.Elevators[bestIndex].TargetFloors,
 		request.Floor,
 	)
 	return true

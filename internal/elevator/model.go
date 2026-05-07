@@ -39,7 +39,6 @@ type Request struct {
 	Kind      RequestKind `json:"kind"`
 
 	// TODO: 考虑一下请求是否应该记录创建时间。如果需要，应该使用什么类型？
-	// 暂时保留为注释；我们会在实现 FCFS 之前决定。
 }
 
 // Elevator 表示一部电梯轿厢。
