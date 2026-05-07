@@ -3594,3 +3594,444 @@ POST /api/elevators/{id}/requests
 ```
 
 后续进入更完整的调度和前端阶段时，再把 Cabin 请求改成绑定具体电梯会更合适。
+
+## 2026-05-07：调度算法 skeleton 和设计思路
+
+本阶段目标：把之前写在 `system.go` 里的临时调度逻辑迁到 `scheduler.go`，并建立一个能支持多种算法切换的基础结构。
+
+### 1. 之前的基础调度算法是否应该迁到 `scheduler.go`
+
+应该迁。
+
+之前 `system.go` 里有类似这样的职责：
+
+```text
+Step()
+  ├── 分配请求给电梯
+  └── 推进每部电梯移动
+```
+
+其中“推进电梯移动”属于系统运行逻辑，继续放在 `system.go` 可以。
+
+但“请求分配给哪部电梯”属于调度算法，应该放到 `scheduler.go`。
+
+所以现在职责拆成：
+
+```text
+system.go
+  NewSystem
+  AddRequest
+  SetScheduler
+  Snapshot
+  Step
+  stepElevator
+
+scheduler.go
+  Scheduler interface
+  FirstAvailableScheduler
+  NearestIdleScheduler
+  NewScheduler
+```
+
+这样以后修改调度算法时，不需要反复改 `Step()` 主流程。
+
+### 2. 如何为不同算法定义统一接口
+
+当前定义了：
+
+```go
+type Scheduler interface {
+	Name() string
+	Assign(system *System) bool
+}
+```
+
+这个接口要求每个调度算法都提供两个方法：
+
+```text
+Name()
+  返回算法名称，例如 "first-available" 或 "nearest-idle"
+
+Assign(system *System)
+  尝试把 PendingRequests 里的请求分配给某部电梯
+```
+
+返回值 `bool` 表示：
+
+```text
+true   本次确实分配了一个请求
+false  没有请求可分配，或当前没有合适电梯
+```
+
+这样 `System.Step()` 就不需要知道具体算法细节：
+
+```go
+s.scheduler.Assign(s)
+```
+
+它只知道“调用当前调度器，让它尝试分配请求”。
+
+这就是接口的价值：
+
+```text
+System 依赖统一接口
+不同算法实现同一个接口
+后续切换算法时，Step 不用改
+```
+
+### 3. 不同调度算法是否应该放不同 Go 文件
+
+可以，但不一定一开始就要拆。
+
+当前算法还很少，所以先放在：
+
+```text
+internal/elevator/scheduler.go
+```
+
+是合理的。
+
+等算法变多以后，可以拆成：
+
+```text
+internal/elevator/scheduler.go          放 Scheduler interface 和 NewScheduler
+internal/elevator/scheduler_first.go    放 FirstAvailableScheduler
+internal/elevator/scheduler_nearest.go  放 NearestIdleScheduler
+internal/elevator/scheduler_scan.go     放 SCAN 算法
+```
+
+注意：这些文件只要都写：
+
+```go
+package elevator
+```
+
+它们就仍然属于同一个 Go 包，可以互相访问同一个包里的类型和函数。
+
+所以拆文件只是为了阅读和维护，不是为了创建新的模块边界。
+
+### 当前已有的调度器
+
+#### `FirstAvailableScheduler`
+
+这是从之前 `system.go` 迁出来的最小策略：
+
+```text
+只看 1 号电梯
+如果 1 号电梯空闲
+就把最早的请求分配给它
+```
+
+代码里对应：
+
+```go
+type FirstAvailableScheduler struct{}
+```
+
+这个算法很简单，但适合保留，因为它可以作为“最小可运行调度器”。
+
+#### `NearestIdleScheduler`
+
+这是“最近空闲电梯优先”的基础版本：
+
+```text
+取最早的 PendingRequest
+遍历所有电梯
+跳过忙碌或紧急停止的电梯
+计算每部可用电梯到请求楼层的距离
+选择距离最小的电梯
+把请求楼层加入它的 TargetFloors
+```
+
+当前已经可运行，但还留了一个适合继续思考的 TODO：
+
+```text
+如果两部电梯距离一样，应该如何决策？
+```
+
+可以选择：
+
+```text
+编号小的优先
+目标楼层更少的优先
+当前方向更合适的优先
+保持先遇到谁就选谁
+```
+
+当前版本采用的是“先遇到谁就选谁”，因为 `distance < bestDistance` 才更新。
+
+### `NewScheduler` 是什么
+
+当前有：
+
+```go
+func NewScheduler(name string) (Scheduler, error)
+```
+
+它负责根据字符串创建具体调度器：
+
+```go
+NewScheduler("first-available")
+NewScheduler("nearest-idle")
+```
+
+这为后续 API 切换算法做准备。
+
+例如以后可以设计：
+
+```text
+POST /api/scheduler
+```
+
+请求体：
+
+```json
+{
+  "name": "nearest-idle"
+}
+```
+
+后端调用：
+
+```go
+system.SetScheduler("nearest-idle")
+```
+
+### `System` 里新增了什么
+
+`System` 里新增：
+
+```go
+SchedulerName string `json:"schedulerName"`
+scheduler Scheduler
+```
+
+两个字段职责不同：
+
+```text
+SchedulerName
+  暴露给 API 和前端，用于显示当前调度算法名称
+
+scheduler
+  真正执行调度逻辑的对象
+  小写字段，不会被 JSON 暴露
+```
+
+前端现在会显示：
+
+```text
+Scheduler: first-available
+```
+
+这来自 `GET /api/state` 返回的 `schedulerName`。
+
+### `Step()` 现在怎么工作
+
+现在的 `Step()` 主流程变成：
+
+```text
+如果没有 scheduler，返回错误
+调用当前 scheduler.Assign(s)，尝试分配请求
+遍历所有电梯，推进每部电梯移动一步
+```
+
+也就是：
+
+```go
+s.scheduler.Assign(s)
+
+for i := range s.Elevators {
+	stepElevator(&s.Elevators[i])
+}
+```
+
+这样调度算法和电梯运动逻辑分开了。
+
+### 留给我继续练习的填空
+
+当前最适合继续练习的是：
+
+1. 给 `NearestIdleScheduler` 写测试。
+
+   构造一个系统，让不同电梯在不同楼层，然后添加请求，检查请求是否分配给最近的空闲电梯。
+
+2. 思考距离相同的 tie-breaker。
+
+   例如两部电梯距离都为 2，该选谁？
+
+3. 后续加 API 切换调度器。
+
+   例如：
+
+   ```text
+   POST /api/scheduler
+   ```
+
+   让前端可以切换 `"first-available"` 和 `"nearest-idle"`。
+
+当前不要急着实现 FCFS 或 SCAN。先把 `Scheduler interface -> 两个算法 -> 测试 -> API 切换` 这条线走通更重要。
+
+### `Assign()` 到底是干嘛的
+
+在 `internal/elevator/system.go` 里，`Step()` 现在有一行：
+
+```go
+s.scheduler.Assign(s)
+```
+
+这行的意思是：
+
+```text
+让当前调度算法尝试从 PendingRequests 里取出一个请求，
+并把它分配给某一部电梯。
+```
+
+也就是说，`Assign()` 的职责不是让电梯移动。它只负责“派单”。
+
+电梯真正移动是在后面的代码里：
+
+```go
+for i := range s.Elevators {
+	stepElevator(&s.Elevators[i])
+}
+```
+
+所以 `Step()` 可以拆成两步理解：
+
+```text
+第 1 步：Assign 负责分配请求
+第 2 步：stepElevator 负责让电梯移动一层或开门
+```
+
+#### 一个具体例子
+
+假设当前系统状态是：
+
+```text
+PendingRequests:
+  [{ floor: 5, direction: "up", kind: "hall" }]
+
+1 号电梯:
+  currentFloor = 1
+  targetFloors = []
+```
+
+调用：
+
+```go
+s.scheduler.Assign(s)
+```
+
+之后，调度器可能会做两件事：
+
+```text
+1. 从 PendingRequests 中取出最早的请求
+2. 把请求楼层 5 加入某部电梯的 TargetFloors
+```
+
+如果当前使用的是 `FirstAvailableScheduler`，结果大概是：
+
+```text
+PendingRequests:
+  []
+
+1 号电梯:
+  currentFloor = 1
+  targetFloors = [5]
+```
+
+注意：此时电梯还没有移动。只是多了一个目标楼层。
+
+接下来 `Step()` 会继续执行：
+
+```go
+stepElevator(&s.Elevators[0])
+```
+
+这时电梯才会从 1 楼移动到 2 楼：
+
+```text
+1 号电梯:
+  currentFloor = 2
+  direction = "up"
+  targetFloors = [5]
+```
+
+所以一次完整的 `Step()` 里，状态变化是：
+
+```text
+Assign:
+  PendingRequests -> Elevator.TargetFloors
+
+stepElevator:
+  Elevator.CurrentFloor 发生变化
+```
+
+#### 为什么 `Assign()` 返回 bool
+
+当前定义是：
+
+```go
+Assign(system *System) bool
+```
+
+返回值表示这次有没有真的分配请求：
+
+```text
+true
+  本次成功把一个请求分配给某部电梯
+
+false
+  没有请求可分配，或者暂时没有合适的电梯
+```
+
+例如这些情况会返回 `false`：
+
+```text
+PendingRequests 是空的
+所有电梯都在忙
+所有电梯都处于 EmergencyStop
+```
+
+#### 为什么不直接在 `Step()` 里写调度逻辑
+
+如果直接写在 `Step()` 里，代码可能会变成：
+
+```go
+func (s *System) Step() error {
+  // 最近电梯算法
+  // FCFS 算法
+  // SCAN 算法
+  // 电梯移动逻辑
+}
+```
+
+这样 `Step()` 会越来越长，而且以后切换算法会很麻烦。
+
+现在的结构是：
+
+```text
+Step()
+  调用 scheduler.Assign(s)
+  调用 stepElevator(...)
+```
+
+不同算法只需要各自实现：
+
+```go
+Assign(system *System) bool
+```
+
+例如：
+
+```text
+FirstAvailableScheduler.Assign
+NearestIdleScheduler.Assign
+ScanScheduler.Assign
+```
+
+这样 `Step()` 的主流程就稳定了。
+
+#### 一句话总结
+
+`Assign()` 负责把 `System` 的 `PendingRequests` 分配给一个**特定的电梯**的 `targetFloors[]`，之后 `system.go` 里面的 `stepElevator()` 才会根据这个去移动电梯，**这一步就和调度算法无关了**。
