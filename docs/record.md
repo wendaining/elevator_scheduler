@@ -5339,3 +5339,190 @@ SCAN 下行顺路插入后，Stops 顺序是 [8, 2]
 ```
 
 其中人数和负载已经被移动到后续扩展 TODO，不进入当前核心路线。
+
+### 2026-05-07：关于 `Requests` 是否应该继续使用切片
+
+这次重新审视了当前请求存储结构：
+
+```go
+Requests []Request
+nextRequestID int64
+```
+
+这里有两个容易混淆的问题。
+
+#### 在当前实现里，`Request.ID` 和 `Requests` 下标是否等价
+
+要分两层看。
+
+从**当前实现的数值结果**看，它们几乎是等价的，但有一个 `+1` 偏移。
+
+当前代码里，请求 ID 来自 `System.nextRequestID`：
+
+```go
+ID: s.nextRequestID
+s.nextRequestID++
+```
+
+同时，当前请求只会被追加到切片末尾：
+
+```go
+s.Requests = append(s.Requests, request)
+```
+
+完成请求时，当前代码只是把请求状态改成 `done`，并不会从 `Requests` 里删除它。
+
+所以在当前代码满足这几个条件时：
+
+```text
+只 append
+不 delete
+不排序
+nextRequestID 从 1 开始，每次加 1
+```
+
+那么第一个请求会是：
+
+```text
+Request.ID = 1
+Requests[0]
+```
+
+第二个请求会是：
+
+```text
+Request.ID = 2
+Requests[1]
+```
+
+也就是：
+
+```text
+Request.ID == Requests 下标 + 1
+```
+
+从这个角度说，你的观察是对的：**在目前实现语境下，ID 和下标存在稳定对应关系**。
+
+但从**设计语义**上看，它们不应该被认为是同一个东西。
+
+也就是说：
+
+```text
+Request.ID     是系统分配的稳定编号
+Requests[i]    是当前切片里的第 i 个元素
+```
+
+当前只是因为 `Requests` 从不删除，所以二者看起来绑定了。
+
+原因是：下标只表示“当前放在切片里的位置”。如果以后删除某个请求，或者对请求重新排序，切片下标就可能变化；但请求 ID 应该在请求生命周期内保持不变，因为 `StopPlan.RequestIDs`、日志、测试、前端展示都可能通过这个 ID 引用同一个请求。
+
+所以更合理的原则是：
+
+```text
+Request.ID 是身份标识
+切片下标只是某种存储方式的内部细节
+```
+
+#### 完成的请求是否应该一直留在 `Requests` 里
+
+当前实现会把完成请求标记为：
+
+```go
+Status: RequestDone
+```
+
+但请求对象仍然留在 `Requests []Request` 里。
+
+这个设计在早期有一个好处：容易观察系统历史状态。比如前端或测试可以看到：
+
+```text
+这个请求什么时候创建
+什么时候分配
+什么时候完成
+总等待了多久
+```
+
+但是它的问题也很明显：如果系统长期运行，所有已经完成的请求都会一直留在内存里。后续查找某个请求时也需要遍历整个切片：
+
+```go
+for i := range s.Requests {
+    if s.Requests[i].ID == requestID {
+        ...
+    }
+}
+```
+
+这对课程 demo 来说暂时不会炸，但从系统设计上看，它把两个职责混在了一起：
+
+```text
+运行态请求表：系统现在还需要处理哪些请求
+历史记录：系统过去处理过哪些请求，用于统计和展示
+```
+
+这两个职责最好分开。
+
+#### 更合理的方向：用 map 存运行态请求
+
+Go 里没有叫 `unordered_map` 的标准类型；对应概念是 `map`。
+
+可以把运行态请求改成：
+
+```go
+Requests map[int64]*Request
+```
+
+含义是：
+
+```text
+key   = Request.ID
+value = 指向 Request 的指针
+```
+
+这样做之后，请求 ID 就成为真正的索引：
+
+```go
+request := s.Requests[requestID]
+```
+
+而不需要在切片里线性查找。
+
+请求完成后，也可以从运行态 map 中删除：
+
+```go
+delete(s.Requests, requestID)
+```
+
+这样 `Requests` 就只保存“当前系统还关心的活跃请求”，不会因为已经完成的历史请求无限增长。
+
+#### 但是历史统计不能直接丢
+
+需要注意：删除完成请求不代表系统不需要统计数据。
+
+后续如果要做等待时间补偿、平均等待时间、最大等待时间、调度算法对比，就不能把完成请求的信息彻底丢掉。更合理的做法是把运行态请求和统计结果分开：
+
+```text
+Requests map[int64]*Request
+  保存 pending / assigned 等仍在系统中的请求
+
+RequestStats 或 CompletedRequestHistory
+  保存已经完成请求的等待时间、完成时间、总数等统计数据
+```
+
+当前下一步可以先做前半部分：
+
+```text
+把 Requests 改成 map[int64]*Request
+完成请求后从运行态 Requests 删除
+暂时只预留后续统计结构，不急着做完整历史数据库
+```
+
+这样模型语义会更清楚：
+
+```text
+StopPlan.RequestIDs 引用请求 ID
+System.Requests 负责通过 ID 找到活跃请求
+完成后从 System.Requests 删除
+后续统计另建字段保存
+```
+
+这个方向已经写入 `docs/instructions-from-agent.md` 的 6.5.5，作为下一步计划。
