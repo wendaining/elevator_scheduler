@@ -1,5 +1,7 @@
 package elevator
 
+import "sort"
+
 func IsValidDirection(direction Direction) bool {
 	return direction == DirectionUp ||
 		direction == DirectionDown ||
@@ -38,6 +40,9 @@ func requestIDsByStatus(s *System, status RequestStatus) []int64 {
 			ids = append(ids, id)
 		}
 	}
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i] < ids[j]
+	})
 	return ids
 }
 

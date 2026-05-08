@@ -16,16 +16,18 @@ func main() {
 		defaultTickPerPassenger = 1
 	)
 
-	system, err := elevator.NewSystem(
+	system, err := elevator.NewSystemWithDatabase(
 		defaultFloorCount,
 		defaultElevatorCount,
 		defaultTicksPerFloor,
 		defaultDoorBaseTicks,
 		defaultTickPerPassenger,
+		"data/requests.db",
 	)
 	if err != nil {
 		log.Fatalf("failed to create elevator system: %v", err)
 	}
+	defer system.Close()
 
 	server := &api.Server{System: system}
 

@@ -1,6 +1,9 @@
 package elevator
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestStepMovesElevatorAfterRequest(t *testing.T) {
 	system, err := NewSystem(20, 5, 1, 2, 1)
@@ -76,9 +79,6 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 		t.Fatalf("stop count = %d, want 0", len(firstElevator.Stops))
 	}
 
-	if len(system.RequestHistory) != 1 {
-		t.Fatalf("request history len = %d, want 1", len(system.RequestHistory))
-	}
 	if request.Status != RequestDone {
 		t.Fatalf("request status = %q, want %q", request.Status, RequestDone)
 	}
@@ -89,6 +89,28 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	// 运行态 Requests 中不应再包含已完成的请求
 	if _, ok := system.Requests[request.ID]; ok {
 		t.Fatal("completed request should not be in active Requests")
+	}
+
+	count, err := system.requestStore.CompletedRequestCount()
+	if err != nil {
+		t.Fatalf("CompletedRequestCount returned error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("completed request count = %d, want 1", count)
+	}
+
+	storedRequest, err := system.requestStore.CompletedRequestByID(request.ID)
+	if err != nil {
+		t.Fatalf("CompletedRequestByID returned error: %v", err)
+	}
+	if storedRequest.ID != request.ID {
+		t.Fatalf("stored request ID = %d, want %d", storedRequest.ID, request.ID)
+	}
+	if storedRequest.Status != RequestDone {
+		t.Fatalf("stored request status = %q, want %q", storedRequest.Status, RequestDone)
+	}
+	if storedRequest.CompletedTick != 1 {
+		t.Fatalf("stored completed tick = %d, want 1", storedRequest.CompletedTick)
 	}
 }
 
@@ -156,6 +178,42 @@ func TestNewSystemStoresTimingParameters(t *testing.T) {
 	}
 	if system.TickPerPassenger != 2 {
 		t.Fatalf("tick per passenger = %d, want 2", system.TickPerPassenger)
+	}
+}
+
+func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "requests.db")
+
+	firstSystem, err := NewSystemWithDatabase(20, 5, 1, 2, 1, databasePath)
+	if err != nil {
+		t.Fatalf("NewSystemWithDatabase returned error: %v", err)
+	}
+	request, err := firstSystem.AddRequest(2, DirectionUp, RequestKindHall)
+	if err != nil {
+		t.Fatalf("AddRequest returned error: %v", err)
+	}
+	if err := firstSystem.Step(); err != nil {
+		t.Fatalf("first Step returned error: %v", err)
+	}
+	if err := firstSystem.Step(); err != nil {
+		t.Fatalf("second Step returned error: %v", err)
+	}
+	if err := firstSystem.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	secondSystem, err := NewSystemWithDatabase(20, 5, 1, 2, 1, databasePath)
+	if err != nil {
+		t.Fatalf("second NewSystemWithDatabase returned error: %v", err)
+	}
+	defer secondSystem.Close()
+
+	nextRequest, err := secondSystem.AddRequest(3, DirectionUp, RequestKindHall)
+	if err != nil {
+		t.Fatalf("second AddRequest returned error: %v", err)
+	}
+	if nextRequest.ID != request.ID+1 {
+		t.Fatalf("next request ID = %d, want %d", nextRequest.ID, request.ID+1)
 	}
 }
 

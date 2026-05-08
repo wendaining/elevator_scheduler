@@ -118,18 +118,19 @@ type System struct {
 	Elevators []Elevator `json:"elevators"`
 
 	// Requests 是运行态请求表，只保存 pending 和 assigned 状态的请求。
-	// 请求完成后会从本 map 中删除，移入 RequestHistory。
+	// 请求完成后会写入 SQLite，并从本 map 中删除。
 	// key 为请求 ID，value 为请求指针。
 	Requests map[int64]*Request `json:"requests"`
-
-	// RequestHistory 保存所有已完成请求的完整生命周期记录，用于统计和调度算法对比。
-	RequestHistory []*Request `json:"requestHistory"`
 
 	// SchedulerName 会暴露给 API 和前端，方便观察当前调度策略。
 	SchedulerName string `json:"schedulerName"`
 
 	// scheduler 是真正执行调度逻辑的对象。字段名小写，所以 JSON 不会暴露它。
 	scheduler Scheduler
+
+	// requestStore 负责把已完成请求写入 SQLite。
+	// 字段名小写且 json:"-"，表示它属于后端内部实现，不出现在 API 状态里。
+	requestStore *RequestStore `json:"-"`
 
 	nextRequestID int64
 }

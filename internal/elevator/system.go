@@ -15,6 +15,25 @@ func NewSystem(
 	doorBaseTicks int,
 	tickPerPassenger int,
 ) (*System, error) {
+	return NewSystemWithDatabase(
+		floors,
+		elevatorCount,
+		ticksPerFloor,
+		doorBaseTicks,
+		tickPerPassenger,
+		":memory:",
+	)
+}
+
+// NewSystemWithDatabase 创建电梯系统，并把已完成请求持久化到指定 SQLite 数据库。
+func NewSystemWithDatabase(
+	floors int,
+	elevatorCount int,
+	ticksPerFloor int,
+	doorBaseTicks int,
+	tickPerPassenger int,
+	databasePath string,
+) (*System, error) {
 	// 数据合法性检查
 	if floors < 1 {
 		return nil, fmt.Errorf("floors must be at least 1, got %d", floors)
@@ -30,6 +49,16 @@ func NewSystem(
 	}
 	if tickPerPassenger < 0 {
 		return nil, fmt.Errorf("tick per passenger must be at least 0, got %d", tickPerPassenger)
+	}
+
+	requestStore, err := OpenRequestStore(databasePath)
+	if err != nil {
+		return nil, err
+	}
+	maxCompletedRequestID, err := requestStore.MaxCompletedRequestID()
+	if err != nil {
+		requestStore.Close()
+		return nil, err
 	}
 
 	elevators := make([]Elevator, elevatorCount)
@@ -57,10 +86,10 @@ func NewSystem(
 		TickPerPassenger: tickPerPassenger,
 		Elevators:        elevators,
 		Requests:         map[int64]*Request{},
-		RequestHistory:   []*Request{},
 		SchedulerName:    scheduler.Name(),
 		scheduler:        scheduler,
-		nextRequestID:    1,
+		requestStore:     requestStore,
+		nextRequestID:    maxCompletedRequestID + 1,
 	}, nil
 }
 
@@ -105,6 +134,14 @@ func (s *System) SetScheduler(name string) error {
 	return nil
 }
 
+// Close 释放 System 持有的外部资源，例如 SQLite 数据库连接。
+func (s *System) Close() error {
+	if s == nil {
+		return nil
+	}
+	return s.requestStore.Close()
+}
+
 // Snapshot 返回系统当前状态的 JSON 快照，带缩进格式，便于调试和 HTTP API 使用。
 func (s *System) Snapshot() ([]byte, error) {
 	return json.MarshalIndent(s, "", "  ")
@@ -128,7 +165,9 @@ func (s *System) Step() error {
 		log.Println("assigned one request")
 	}
 	for i := range s.Elevators {
-		stepElevator(s, &s.Elevators[i])
+		if err := stepElevator(s, &s.Elevators[i]); err != nil {
+			return err
+		}
 	}
 	s.CurrentTick++
 	return nil
@@ -137,11 +176,11 @@ func (s *System) Step() error {
 // stepElevator 推进单部电梯一个行动 tick。
 // 跨越相邻两层需要消耗 s.TicksPerFloor 个 tick；
 // 到达目标层后，再用 s.DoorBaseTicks 表示开门停靠时间。
-func stepElevator(s *System, e *Elevator) {
+func stepElevator(s *System, e *Elevator) error {
 	// 紧急停止状态下不移动
 	if e.EmergencyStop {
 		e.Direction = DirectionIdle
-		return
+		return nil
 	}
 
 	// 门开着时，当前 tick 用于停靠，不移动。
@@ -153,13 +192,13 @@ func stepElevator(s *System, e *Elevator) {
 			e.DoorOpen = false
 		}
 		e.Direction = DirectionIdle
-		return
+		return nil
 	}
 
 	// 没有停靠计划，保持空闲
 	if len(e.Stops) == 0 {
 		e.Direction = DirectionIdle
-		return
+		return nil
 	}
 
 	nextStop := e.Stops[0]
@@ -171,24 +210,27 @@ func stepElevator(s *System, e *Elevator) {
 		e.DoorOpen = true
 		e.DoorRemainingTicks = s.DoorBaseTicks
 		for _, requestID := range nextStop.RequestIDs {
-			s.completeRequest(requestID, s.CurrentTick)
+			if err := s.completeRequest(requestID, s.CurrentTick); err != nil {
+				return err
+			}
 		}
 		e.Stops = e.Stops[1:]
 		if e.DoorRemainingTicks == 0 {
 			e.DoorOpen = false
 		}
-		return
+		return nil
 	}
 
 	// 当前不在目标楼层：本 tick 用于向目标方向移动。
 	if e.CurrentFloor < targetFloor {
 		e.Direction = DirectionUp
 		moveOneTick(e, 1, s.TicksPerFloor)
-		return
+		return nil
 	}
 
 	e.Direction = DirectionDown
 	moveOneTick(e, -1, s.TicksPerFloor)
+	return nil
 }
 
 // moveOneTick 是一个辅助函数，用于将电梯 e 向目标方向移动一个 tick。
@@ -217,15 +259,24 @@ func (s *System) assignRequestToElevator(requestID int64, elevatorIndex int) {
 	addStopPlan(elevator, stopPlanFromRequest(*request))
 }
 
-// completeRequest 将指定 ID 的请求标记为完成，记录完成时间片，
-// 然后将其从运行态 Requests 中删除，移入 RequestHistory。
-func (s *System) completeRequest(requestID int64, completedTick int) {
+// completeRequest 将指定 ID 的请求标记为完成，写入 SQLite，
+// 然后将其从运行态 Requests 中删除。
+func (s *System) completeRequest(requestID int64, completedTick int) error {
 	req, ok := s.Requests[requestID]
 	if !ok {
-		return
+		return nil
 	}
-	req.Status = RequestDone
-	req.CompletedTick = completedTick
-	s.RequestHistory = append(s.RequestHistory, req)
+
+	completedRequest := *req
+	completedRequest.Status = RequestDone
+	completedRequest.CompletedTick = completedTick
+
+	// 先写数据库，再从运行态 map 删除
+	if err := s.requestStore.SaveCompletedRequest(completedRequest); err != nil {
+		return err
+	}
+
+	*req = completedRequest
 	delete(s.Requests, requestID)
+	return nil
 }

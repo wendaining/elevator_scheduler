@@ -5633,9 +5633,11 @@ SCAN 和 FCFS 在同一批请求下哪个等待时间更短
 
 这样既不丢统计能力，也不会让 `System.Requests` 变成越来越大的历史仓库。
 
-## 2026-05-08：请求运行态存储重构（map + 历史记录）
+## 2026-05-08：请求运行态存储重构（map + 临时历史记录）
 
-本阶段目标：把 `System.Requests` 从 `[]Request` 升级为 `map[int64]*Request`，请求完成后移入 `RequestHistory`。
+本阶段目标：把 `System.Requests` 从 `[]Request` 升级为 `map[int64]*Request`。当时为了先完成运行态和历史的拆分，临时把完成请求移入 `RequestHistory`。
+
+注意：`RequestHistory` 只是 6.5.5 的过渡结构。后续 6.5.7 已经把它删除，改为写入 SQLite。
 
 ### 为什么换 map
 
@@ -5649,8 +5651,9 @@ SCAN 和 FCFS 在同一批请求下哪个等待时间更短
 运行态 Requests（map[int64]*Request）：
   只有 pending 和 assigned 状态
 
-历史 RequestHistory（[]*Request）：
+临时历史 RequestHistory（[]*Request）：
   请求完成后从 Requests 删除，append 到这里
+  6.5.7 中已经被 SQLite 替代
 ```
 
 ### 辅助函数的类型变化
@@ -5691,3 +5694,190 @@ go test ./...
 ```
 
 全部通过（9 个测试）。
+
+## 2026-05-08：完成请求历史 SQLite 持久化
+
+本阶段完成 6.5.7：运行态 `Requests map[int64]*Request` 继续只保存活跃请求；请求完成时，不再进入内存里的 `RequestHistory`，而是写入 SQLite 数据库。
+
+### Go 依赖
+
+项目新增 SQLite Go 驱动：
+
+```text
+github.com/mattn/go-sqlite3
+```
+
+它是 `database/sql` 的 SQLite driver。代码里真正使用的是 Go 标准库的 `database/sql`，SQLite 驱动通过空白导入注册：
+
+```go
+import _ "github.com/mattn/go-sqlite3"
+```
+
+这里的 `_` 表示：导入这个包是为了执行它的初始化逻辑，而不是直接调用包里的函数。
+
+### 新增 `RequestStore`
+
+新增文件：
+
+```text
+internal/elevator/request_store.go
+```
+
+它封装数据库逻辑，避免 SQL 语句散落在 `system.go` 里面。
+
+主要函数：
+
+```go
+OpenRequestStore(databasePath string)
+SaveCompletedRequest(request Request)
+CompletedRequestCount()
+CompletedRequestByID(requestID int64)
+MaxCompletedRequestID()
+Close()
+```
+
+`System` 内部增加了一个不导出的字段：
+
+```go
+requestStore *RequestStore `json:"-"`
+```
+
+字段名小写，说明它只属于后端内部；`json:"-"` 表示它不会出现在 `GET /api/state` 的 JSON 里。
+
+### SQLite 表结构
+
+数据库表名：
+
+```text
+completed_requests
+```
+
+表字段和 `Request` 结构体一一对应：
+
+```text
+id
+floor
+direction
+kind
+status
+created_tick
+assigned_tick
+completed_tick
+assigned_elevator_id
+```
+
+这满足当前文档里的要求：表的属性和一个 `Request` 保持一致。
+
+### 完成请求时发生什么
+
+现在 `completeRequest()` 的流程是：
+
+```text
+1. 通过 requestID 从运行态 Requests map 中找到请求
+2. 复制一份 completedRequest
+3. 设置 Status = done
+4. 设置 CompletedTick
+5. 调用 requestStore.SaveCompletedRequest(...) 写入 SQLite
+6. 写入成功后，更新原请求对象
+7. 从运行态 Requests map 中 delete
+```
+
+注意顺序：先写数据库，再从运行态 map 删除。
+
+这样做是为了避免数据库写入失败时，内存中的活跃请求已经被删掉，导致历史记录和运行状态同时丢失。
+
+### 删除 `RequestHistory`
+
+之前 6.5.5 里临时使用过：
+
+```go
+RequestHistory []*Request
+```
+
+现在它已经删除。
+
+原因是：既然 6.5.7 明确要求上数据库，那么历史完成请求就不应该再同时保存在内存历史切片里。否则会出现两个历史来源：
+
+```text
+RequestHistory 内存切片
+SQLite completed_requests 表
+```
+
+两个来源并存会增加同步问题。当前设计里，历史完成请求的事实来源是 SQLite。
+
+### 系统初始化和数据库文件
+
+测试里默认使用内存 SQLite：
+
+```go
+NewSystem(...)
+```
+
+内部会使用：
+
+```text
+:memory:
+```
+
+正式后端启动时使用文件数据库：
+
+```go
+NewSystemWithDatabase(..., "data/requests.db")
+```
+
+也就是说，运行：
+
+```bash
+go run ./cmd/server
+```
+
+之后，请求完成记录会写入：
+
+```text
+data/requests.db
+```
+
+`OpenRequestStore()` 会自动创建数据库目录。
+
+### 为什么要读取最大 ID
+
+SQLite 表中 `id` 是主键。
+
+如果服务器重启后 `nextRequestID` 又从 1 开始，那么新的完成请求写入数据库时可能和旧记录冲突。
+
+所以 `NewSystemWithDatabase()` 初始化时会调用：
+
+```go
+MaxCompletedRequestID()
+```
+
+然后让：
+
+```text
+nextRequestID = maxCompletedRequestID + 1
+```
+
+这样重启后，请求 ID 会继续向后增长。
+
+### 本次验证
+
+已运行：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go mod tidy
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+结果：
+
+```text
+cmd/server: no test files
+internal/api: no test files
+internal/elevator: ok
+```
+
+因为当前沙箱里的默认 Go build cache 目录只读，所以临时把 `GOCACHE` 指向了 `/tmp/os_sp26_proj1-go-build`。
+
+### 2026-05-08 关于数据库持久化的一个思考
+
+其实我觉得 `MaxCompletedRequestID` 的设计不太合理。
