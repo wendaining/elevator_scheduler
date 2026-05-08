@@ -33,14 +33,14 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 	if system.CurrentTick != 1 {
 		t.Fatalf("current tick = %d, want 1", system.CurrentTick)
 	}
-	if system.Requests[0].Status != RequestAssigned {
-		t.Fatalf("request status = %q, want %q", system.Requests[0].Status, RequestAssigned)
+	if request.Status != RequestAssigned {
+		t.Fatalf("request status = %q, want %q", request.Status, RequestAssigned)
 	}
-	if system.Requests[0].AssignedTick != 0 {
-		t.Fatalf("assigned tick = %d, want 0", system.Requests[0].AssignedTick)
+	if request.AssignedTick != 0 {
+		t.Fatalf("assigned tick = %d, want 0", request.AssignedTick)
 	}
-	if system.Requests[0].AssignedElevatorID != 1 {
-		t.Fatalf("assigned elevator ID = %d, want 1", system.Requests[0].AssignedElevatorID)
+	if request.AssignedElevatorID != 1 {
+		t.Fatalf("assigned elevator ID = %d, want 1", request.AssignedElevatorID)
 	}
 }
 
@@ -50,7 +50,8 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
 
-	if _, err := system.AddRequest(2, DirectionUp, RequestKindHall); err != nil {
+	request, err := system.AddRequest(2, DirectionUp, RequestKindHall)
+	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
 
@@ -74,11 +75,20 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	if len(firstElevator.Stops) != 0 {
 		t.Fatalf("stop count = %d, want 0", len(firstElevator.Stops))
 	}
-	if system.Requests[0].Status != RequestDone {
-		t.Fatalf("request status = %q, want %q", system.Requests[0].Status, RequestDone)
+
+	if len(system.RequestHistory) != 1 {
+		t.Fatalf("request history len = %d, want 1", len(system.RequestHistory))
 	}
-	if system.Requests[0].CompletedTick != 1 {
-		t.Fatalf("completed tick = %d, want 1", system.Requests[0].CompletedTick)
+	if request.Status != RequestDone {
+		t.Fatalf("request status = %q, want %q", request.Status, RequestDone)
+	}
+	if request.CompletedTick != 1 {
+		t.Fatalf("completed tick = %d, want 1", request.CompletedTick)
+	}
+
+	// 运行态 Requests 中不应再包含已完成的请求
+	if _, ok := system.Requests[request.ID]; ok {
+		t.Fatal("completed request should not be in active Requests")
 	}
 }
 
@@ -88,7 +98,8 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
 
-	if _, err := system.AddRequest(2, DirectionUp, RequestKindHall); err != nil {
+	request, err := system.AddRequest(2, DirectionUp, RequestKindHall)
+	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
 
@@ -107,18 +118,21 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 	if system.Elevators[0].CurrentFloor != 2 {
 		t.Fatalf("after third step floor = %d, want 2", system.Elevators[0].CurrentFloor)
 	}
-	if system.Requests[0].Status != RequestAssigned {
-		t.Fatalf("request status = %q, want %q before door opens", system.Requests[0].Status, RequestAssigned)
+	if request.Status != RequestAssigned {
+		t.Fatalf("request status = %q, want %q before door opens", request.Status, RequestAssigned)
 	}
 
 	if err := system.Step(); err != nil {
 		t.Fatalf("fourth Step returned error: %v", err)
 	}
-	if system.Requests[0].Status != RequestDone {
-		t.Fatalf("request status = %q, want %q after door opens", system.Requests[0].Status, RequestDone)
+	if request.Status != RequestDone {
+		t.Fatalf("request status = %q, want %q after door opens", request.Status, RequestDone)
 	}
-	if system.Requests[0].CompletedTick != 3 {
-		t.Fatalf("completed tick = %d, want 3", system.Requests[0].CompletedTick)
+	if request.CompletedTick != 3 {
+		t.Fatalf("completed tick = %d, want 3", request.CompletedTick)
+	}
+	if _, ok := system.Requests[request.ID]; ok {
+		t.Fatal("completed request should not be in active Requests")
 	}
 }
 

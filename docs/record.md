@@ -5632,3 +5632,62 @@ SCAN 和 FCFS 在同一批请求下哪个等待时间更短
 ```
 
 这样既不丢统计能力，也不会让 `System.Requests` 变成越来越大的历史仓库。
+
+## 2026-05-08：请求运行态存储重构（map + 历史记录）
+
+本阶段目标：把 `System.Requests` 从 `[]Request` 升级为 `map[int64]*Request`，请求完成后移入 `RequestHistory`。
+
+### 为什么换 map
+
+之前 `Requests` 是 `[]Request`，查找某个请求需要 O(n) 遍历。`completeRequest`、`assignRequestToElevator`、调度器的 `Assign` 都要线性搜索。
+
+换成 `map[int64]*Request` 后，通过请求 ID 直接 O(1) 查找。
+
+### 运行态和历史分离
+
+```text
+运行态 Requests（map[int64]*Request）：
+  只有 pending 和 assigned 状态
+
+历史 RequestHistory（[]*Request）：
+  请求完成后从 Requests 删除，append 到这里
+```
+
+### 辅助函数的类型变化
+
+```go
+// 旧：返回切片下标 int
+func firstPendingRequestIndex(s *System) int
+func requestIndicesByStatus(s *System, status RequestStatus) []int
+
+// 新：返回 map key int64
+func firstPendingRequestID(s *System) int64
+func requestIDsByStatus(s *System, status RequestStatus) []int64
+```
+
+空值检查也从 `-1` 改为 `0`（int64 零值）。
+
+### Go 语法注意：map 的 range
+
+```go
+// 切片遍历：拿到的是值拷贝
+for i, request := range s.Requests {
+    // i 是 int（下标）
+    // request 是 Request（值拷贝）
+}
+
+// map 遍历：value 本身就是指针
+for id, request := range s.Requests {
+    // id 是 int64（key）
+    // request 是 *Request（指针，无需再取地址）
+}
+```
+
+### 本次验证
+
+```bash
+go build ./...
+go test ./...
+```
+
+全部通过（9 个测试）。

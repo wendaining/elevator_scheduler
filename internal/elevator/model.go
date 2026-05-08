@@ -117,9 +117,13 @@ type System struct {
 	// Elevators 存储大楼中的所有电梯轿厢。
 	Elevators []Elevator `json:"elevators"`
 
-	// Requests 存储所有创建过且仍需展示/统计的请求。
-	// 请求是否待分配、已分配或已完成，由 Request.Status 表示。
-	Requests []Request `json:"requests"`
+	// Requests 是运行态请求表，只保存 pending 和 assigned 状态的请求。
+	// 请求完成后会从本 map 中删除，移入 RequestHistory。
+	// key 为请求 ID，value 为请求指针。
+	Requests map[int64]*Request `json:"requests"`
+
+	// RequestHistory 保存所有已完成请求的完整生命周期记录，用于统计和调度算法对比。
+	RequestHistory []*Request `json:"requestHistory"`
 
 	// SchedulerName 会暴露给 API 和前端，方便观察当前调度策略。
 	SchedulerName string `json:"schedulerName"`

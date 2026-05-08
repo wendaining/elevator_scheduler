@@ -15,29 +15,30 @@ func canAcceptRequest(e Elevator) bool {
 	return !e.EmergencyStop && len(e.Stops) == 0
 }
 
-// 找到所有 pending 请求中最早的一个，返回它在 s.Requests 中的下标。如果没有 pending 请求，返回 -1。
-func firstPendingRequestIndex(s *System) int {
-	indices := requestIndicesByStatus(s, RequestPending)
-	if len(indices) == 0 {
-		return -1
+// firstPendingRequestID 找到所有 pending 请求中 ID 最小的一个，返回其请求 ID。
+// 如果没有 pending 请求，返回 0。
+func firstPendingRequestID(s *System) int64 {
+	ids := requestIDsByStatus(s, RequestPending)
+	if len(ids) == 0 {
+		return 0
 	}
-	return indices[0]
+	return ids[0]
 }
 
-// 判断系统中是否有待分配的请求
+// hasPendingRequests 判断系统中是否有待分配的请求。
 func hasPendingRequests(s *System) bool {
-	return firstPendingRequestIndex(s) != -1
+	return firstPendingRequestID(s) != 0
 }
 
-// 返回系统中所有请求状态为 status 的请求在 s.Requests 中的下标列表。
-func requestIndicesByStatus(s *System, status RequestStatus) []int {
-	indices := []int{}
-	for i, request := range s.Requests {
+// requestIDsByStatus 返回系统中所有请求状态为 status 的请求 ID 列表。
+func requestIDsByStatus(s *System, status RequestStatus) []int64 {
+	ids := []int64{}
+	for id, request := range s.Requests {
 		if request.Status == status {
-			indices = append(indices, i)
+			ids = append(ids, id)
 		}
 	}
-	return indices
+	return ids
 }
 
 func floorDistance(a int, b int) int {
@@ -47,7 +48,7 @@ func floorDistance(a int, b int) int {
 	return b - a
 }
 
-// 将一个 Request 转换成对应的 StopPlan，方便调度器处理。
+// stopPlanFromRequest 将一个 Request 转换成对应的 StopPlan，方便调度器处理。
 // 对于 cabin 请求，reason 固定为 cabin；
 // 对于 hall 请求，根据 direction 区分 reason 是 hall_up 还是 hall_down。
 func stopPlanFromRequest(request Request) StopPlan {
@@ -81,7 +82,7 @@ func addStopPlan(e *Elevator, stop StopPlan) {
 	e.Stops = append(e.Stops, stop)
 }
 
-// 判断是不是同一个 StopPlan：
+// isSameStop 判断两个 StopPlan 是否表示同一停靠：
 // 同一层、同一原因、同一方向。
 func isSameStop(a StopPlan, b StopPlan) bool {
 	return a.Floor == b.Floor &&

@@ -2,7 +2,7 @@ package elevator
 
 // SCANScheduler 实现 SCAN 调度算法。
 //
-// SCAN 也常被叫作“电梯算法”：
+// SCAN 也常被叫作"电梯算法"：
 //   - 每部电梯都有一个长期扫描方向 ScanDirection。
 //   - 调度时优先选择该方向上的请求。
 //   - 如果该方向上没有请求，就反转 ScanDirection，再尝试反方向请求。
@@ -33,7 +33,7 @@ func (SCANScheduler) Assign(s *System) bool {
 }
 
 func assignAlongTheWay(s *System) bool {
-	for requestIndex, request := range s.Requests {
+	for requestID, request := range s.Requests {
 		if request.Status != RequestPending {
 			continue
 		}
@@ -44,7 +44,7 @@ func assignAlongTheWay(s *System) bool {
 		for elevatorIndex := range s.Elevators {
 			elevator := &s.Elevators[elevatorIndex]
 			normalizeScanDirection(elevator)
-			if !canTakeRequestInSCAN(*elevator, request) {
+			if !canTakeRequestInSCAN(*elevator, *request) {
 				continue
 			}
 
@@ -60,7 +60,7 @@ func assignAlongTheWay(s *System) bool {
 		}
 
 		elevator := &s.Elevators[bestElevatorIndex]
-		assignSCANRequest(s, elevator, requestIndex)
+		assignSCANRequest(s, elevator, requestID)
 		return true
 	}
 
@@ -68,12 +68,12 @@ func assignAlongTheWay(s *System) bool {
 }
 
 func assignToIdleElevator(s *System) bool {
-	bestRequestIndex := -1
+	var bestRequestID int64
 	bestElevatorIndex := -1
 	bestPriority := 0
 	bestDistance := 0
 
-	for requestIndex, request := range s.Requests {
+	for requestID, request := range s.Requests {
 		if request.Status != RequestPending {
 			continue
 		}
@@ -86,12 +86,12 @@ func assignToIdleElevator(s *System) bool {
 
 			normalizeScanDirection(elevator)
 
-			priority := scanRequestPriority(*elevator, request)
+			priority := scanRequestPriority(*elevator, *request)
 			distance := floorDistance(elevator.CurrentFloor, request.Floor)
 			if bestElevatorIndex == -1 ||
 				priority < bestPriority ||
 				(priority == bestPriority && distance < bestDistance) {
-				bestRequestIndex = requestIndex
+				bestRequestID = requestID
 				bestElevatorIndex = elevatorIndex
 				bestPriority = priority
 				bestDistance = distance
@@ -103,17 +103,18 @@ func assignToIdleElevator(s *System) bool {
 		return false
 	}
 
-	request := s.Requests[bestRequestIndex]
+	request := s.Requests[bestRequestID]
 	elevator := &s.Elevators[bestElevatorIndex]
 	if bestPriority > 0 {
 		alignIdleElevatorScanDirection(elevator, request.Floor)
 	}
-	assignSCANRequest(s, elevator, bestRequestIndex)
+	assignSCANRequest(s, elevator, bestRequestID)
 	return true
 }
 
-func assignSCANRequest(s *System, elevator *Elevator, requestIndex int) {
-	request := &s.Requests[requestIndex]
+// assignSCANRequest 将一个请求分配给指定电梯，更新请求状态并插入停靠计划。
+func assignSCANRequest(s *System, elevator *Elevator, requestID int64) {
+	request := s.Requests[requestID]
 	request.Status = RequestAssigned
 	request.AssignedTick = s.CurrentTick
 	request.AssignedElevatorID = elevator.ID

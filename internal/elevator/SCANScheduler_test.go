@@ -13,10 +13,11 @@ func TestSCANSchedulerAssignsRequestInScanDirection(t *testing.T) {
 
 	system.Elevators[0].CurrentFloor = 5
 	system.Elevators[0].ScanDirection = DirectionUp
-	system.Requests = []Request{
-		{ID: 1, Floor: 3, Direction: DirectionDown, Kind: RequestKindHall, Status: RequestPending},
-		{ID: 2, Floor: 8, Direction: DirectionUp, Kind: RequestKindHall, Status: RequestPending},
+	system.Requests = map[int64]*Request{
+		1: {ID: 1, Floor: 3, Direction: DirectionDown, Kind: RequestKindHall, Status: RequestPending},
+		2: {ID: 2, Floor: 8, Direction: DirectionUp, Kind: RequestKindHall, Status: RequestPending},
 	}
+	system.nextRequestID = 3
 
 	if !system.scheduler.Assign(system) {
 		t.Fatal("Assign returned false, want true")
@@ -29,8 +30,8 @@ func TestSCANSchedulerAssignsRequestInScanDirection(t *testing.T) {
 	if system.Elevators[0].ScanDirection != DirectionUp {
 		t.Fatalf("scan direction = %q, want %q", system.Elevators[0].ScanDirection, DirectionUp)
 	}
-	if system.Requests[1].Status != RequestAssigned {
-		t.Fatalf("request status = %q, want %q", system.Requests[1].Status, RequestAssigned)
+	if system.Requests[2].Status != RequestAssigned {
+		t.Fatalf("request status = %q, want %q", system.Requests[2].Status, RequestAssigned)
 	}
 }
 
@@ -45,9 +46,10 @@ func TestSCANSchedulerReversesWhenNoRequestInScanDirection(t *testing.T) {
 
 	system.Elevators[0].CurrentFloor = 10
 	system.Elevators[0].ScanDirection = DirectionUp
-	system.Requests = []Request{
-		{ID: 1, Floor: 4, Direction: DirectionDown, Kind: RequestKindHall, Status: RequestPending},
+	system.Requests = map[int64]*Request{
+		1: {ID: 1, Floor: 4, Direction: DirectionDown, Kind: RequestKindHall, Status: RequestPending},
 	}
+	system.nextRequestID = 2
 
 	if !system.scheduler.Assign(system) {
 		t.Fatal("Assign returned false, want true")
@@ -76,9 +78,10 @@ func TestSCANSchedulerAppendsUpRequestAlongTheWay(t *testing.T) {
 	system.Elevators[0].Stops = []StopPlan{
 		{Floor: 10, Reason: StopReasonHallUp, Direction: DirectionUp, RequestIDs: []int64{99}},
 	}
-	system.Requests = []Request{
-		{ID: 1, Floor: 6, Direction: DirectionUp, Kind: RequestKindHall, Status: RequestPending},
+	system.Requests = map[int64]*Request{
+		1: {ID: 1, Floor: 6, Direction: DirectionUp, Kind: RequestKindHall, Status: RequestPending},
 	}
+	system.nextRequestID = 2
 
 	if !system.scheduler.Assign(system) {
 		t.Fatal("Assign returned false, want true")
@@ -88,8 +91,8 @@ func TestSCANSchedulerAppendsUpRequestAlongTheWay(t *testing.T) {
 	if len(stops) != 2 || stops[0].Floor != 6 || stops[1].Floor != 10 {
 		t.Fatalf("stops = %v, want floors [6 10]", stops)
 	}
-	if system.Requests[0].Status != RequestAssigned {
-		t.Fatalf("request status = %q, want %q", system.Requests[0].Status, RequestAssigned)
+	if system.Requests[1].Status != RequestAssigned {
+		t.Fatalf("request status = %q, want %q", system.Requests[1].Status, RequestAssigned)
 	}
 }
 
@@ -107,9 +110,10 @@ func TestSCANSchedulerAppendsDownRequestAlongTheWay(t *testing.T) {
 	system.Elevators[0].Stops = []StopPlan{
 		{Floor: 2, Reason: StopReasonHallDown, Direction: DirectionDown, RequestIDs: []int64{99}},
 	}
-	system.Requests = []Request{
-		{ID: 1, Floor: 8, Direction: DirectionDown, Kind: RequestKindHall, Status: RequestPending},
+	system.Requests = map[int64]*Request{
+		1: {ID: 1, Floor: 8, Direction: DirectionDown, Kind: RequestKindHall, Status: RequestPending},
 	}
+	system.nextRequestID = 2
 
 	if !system.scheduler.Assign(system) {
 		t.Fatal("Assign returned false, want true")
@@ -119,7 +123,7 @@ func TestSCANSchedulerAppendsDownRequestAlongTheWay(t *testing.T) {
 	if len(stops) != 2 || stops[0].Floor != 8 || stops[1].Floor != 2 {
 		t.Fatalf("stops = %v, want floors [8 2]", stops)
 	}
-	if system.Requests[0].Status != RequestAssigned {
-		t.Fatalf("request status = %q, want %q", system.Requests[0].Status, RequestAssigned)
+	if system.Requests[1].Status != RequestAssigned {
+		t.Fatalf("request status = %q, want %q", system.Requests[1].Status, RequestAssigned)
 	}
 }

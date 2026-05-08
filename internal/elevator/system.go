@@ -56,7 +56,8 @@ func NewSystem(
 		DoorBaseTicks:    doorBaseTicks,
 		TickPerPassenger: tickPerPassenger,
 		Elevators:        elevators,
-		Requests:         []Request{},
+		Requests:         map[int64]*Request{},
+		RequestHistory:   []*Request{},
 		SchedulerName:    scheduler.Name(),
 		scheduler:        scheduler,
 		nextRequestID:    1,
@@ -87,9 +88,9 @@ func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*
 		CompletedTick:      0,
 		AssignedElevatorID: 0,
 	}
+	s.Requests[request.ID] = &request
 	s.nextRequestID++
-	s.Requests = append(s.Requests, request)
-	return &s.Requests[len(s.Requests)-1], nil
+	return s.Requests[request.ID], nil
 }
 
 // SetScheduler 根据名称切换调度算法。
@@ -205,8 +206,8 @@ func moveOneTick(e *Elevator, floorDelta int, ticksPerFloor int) {
 // 给 System 添加一些辅助方法，方便调度器调用：
 
 // 用于将某个请求分配给某部电梯，更新请求状态并将停靠计划添加到电梯任务列表中。
-func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
-	request := &s.Requests[requestIndex]
+func (s *System) assignRequestToElevator(requestID int64, elevatorIndex int) {
+	request := s.Requests[requestID]
 	elevator := &s.Elevators[elevatorIndex]
 
 	request.Status = RequestAssigned
@@ -216,14 +217,15 @@ func (s *System) assignRequestToElevator(requestIndex int, elevatorIndex int) {
 	addStopPlan(elevator, stopPlanFromRequest(*request))
 }
 
-// 用于将某个请求标记为完成状态，并记录完成的时间片。
+// completeRequest 将指定 ID 的请求标记为完成，记录完成时间片，
+// 然后将其从运行态 Requests 中删除，移入 RequestHistory。
 func (s *System) completeRequest(requestID int64, completedTick int) {
-	for i := range s.Requests {
-		if s.Requests[i].ID != requestID {
-			continue
-		}
-		s.Requests[i].Status = RequestDone
-		s.Requests[i].CompletedTick = completedTick
+	req, ok := s.Requests[requestID]
+	if !ok {
 		return
 	}
+	req.Status = RequestDone
+	req.CompletedTick = completedTick
+	s.RequestHistory = append(s.RequestHistory, req)
+	delete(s.Requests, requestID)
 }
