@@ -59,24 +59,24 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var payload createRequestPayload
 
 	if err := decodeJSONBody(r, &payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := validateCreateRequestPayload(payload, s.System.FloorCount); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	createdRequest, err := s.System.AddRequest(payload.Floor, payload.Direction, payload.Kind)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -158,13 +158,4 @@ func decodeJSONBody(r *http.Request, dst any) error {
 		return errors.New("request body must contain only one JSON object")
 	}
 	return nil
-}
-
-// writeJSONError 用统一 JSON 格式返回 API 错误。
-func writeJSONError(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error": message,
-	})
 }

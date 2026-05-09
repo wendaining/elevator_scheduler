@@ -6613,13 +6613,13 @@ type createRequestPayload struct {
 
 ### 错误处理
 
-这次补充了统一 JSON 错误响应：
+当前错误响应先继续使用 Go 标准库的 `http.Error()`：
 
-```json
-{
-  "error": "floor must be between 1 and 20, got 30"
-}
+```go
+http.Error(w, err.Error(), http.StatusBadRequest)
 ```
+
+这种方式会返回普通文本错误。它不如统一 JSON 错误响应规范，但当前项目还处在模型和 API 快速调整阶段，先保持简单。
 
 错误场景包括：
 

@@ -66,7 +66,7 @@ func TestHandleRequestRejectsClientOwnedRequestFields(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
 	}
-	assertJSONError(t, response.Body.String())
+	assertTextError(t, response.Body.String())
 }
 
 func TestHandleRequestRejectsInvalidHallDirection(t *testing.T) {
@@ -84,7 +84,7 @@ func TestHandleRequestRejectsInvalidHallDirection(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
 	}
-	assertJSONError(t, response.Body.String())
+	assertTextError(t, response.Body.String())
 }
 
 func TestHandleRequestRejectsInvalidCabinDirection(t *testing.T) {
@@ -102,7 +102,7 @@ func TestHandleRequestRejectsInvalidCabinDirection(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
 	}
-	assertJSONError(t, response.Body.String())
+	assertTextError(t, response.Body.String())
 }
 
 func TestHandleRequestRejectsInvalidJSON(t *testing.T) {
@@ -120,7 +120,7 @@ func TestHandleRequestRejectsInvalidJSON(t *testing.T) {
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
 	}
-	assertJSONError(t, response.Body.String())
+	assertTextError(t, response.Body.String())
 }
 
 func newTestServer(t *testing.T) *Server {
@@ -146,14 +146,10 @@ func newTestServer(t *testing.T) *Server {
 	return &Server{System: system}
 }
 
-func assertJSONError(t *testing.T, body string) {
+func assertTextError(t *testing.T, body string) {
 	t.Helper()
 
-	var response map[string]string
-	if err := json.Unmarshal([]byte(body), &response); err != nil {
-		t.Fatalf("error response is not JSON: %v; body = %s", err, body)
-	}
-	if response["error"] == "" {
-		t.Fatalf("error response does not contain error message: %s", body)
+	if strings.TrimSpace(body) == "" {
+		t.Fatal("error response body is empty")
 	}
 }
