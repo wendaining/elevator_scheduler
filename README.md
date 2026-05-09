@@ -11,7 +11,8 @@
 
 ## 技术栈
 
-- 后端：Go（标准库 `net/http`，不依赖第三方框架）
+- 后端：Go（标准库 `net/http`）
+- 数据库：SQLite
 - 前端：原生 HTML / CSS / JavaScript
 
 ## 快速开始
