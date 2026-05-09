@@ -5878,9 +5878,631 @@ internal/elevator: ok
 
 因为当前沙箱里的默认 Go build cache 目录只读，所以临时把 `GOCACHE` 指向了 `/tmp/os_sp26_proj1-go-build`。
 
-### 2026-05-08 关于数据库持久化的一个思考
+### 2026-05-09 关于数据库持久化的一个思考
 
 其实我觉得现在有两个设计不太合理：
 
-1. `MaxCompletedRequestID` 的设计不太合理。其实我的理想情况是每次的 `RequestID` 都直接从 0 开始计数，每次不同的运行会新建一个表。但是这里又有新的问题：什么是“一次运行”？我发现我不是很说得清楚，因为我对最终的界面的设想其实还不是很完善。
-2. `NewSystemWithDatabase` 的设计我也觉得很烂...因为这里相当于是 `NewSystem` 返回一个 `NewSystemWithDataSystem` 的闭包，我姑且认为这样的设计的缘由是为了向前兼容，防止重构太多东西，但是有点又臭又长了，我不是很喜欢。 Update: 已修改
+1. `MaxCompletedRequestID` 的设计不太合理。其实我的理想情况是每次的 `RequestID` 都直接从 0 开始计数，每次不同的运行会新建一个表。但是这里又有新的问题：什么是“一次运行”？我发现我不是很说得清楚，因为我对最终的界面的设想其实还不是很完善。我觉得这个先列为 TODO，我之后会完善的。Agent 阅读到这里的话也别对这一段文字别做任何修改。
+2. `NewSystemWithDatabase` 的设计我也觉得很烂...因为这里相当于是 `NewSystem` 返回一个 `NewSystemWithDataSystem` 的闭包，我姑且认为这样的设计的缘由是为了向前兼容，防止重构太多东西，但是有点又臭又长了，我不是很喜欢。 Update: 已修改，全部重构为 `NewSystem`
+
+## 2026-05-09：阅读 `internal/elevator/request_store.go`
+
+这一节专门解释 `internal/elevator/request_store.go`。这是项目里第一次比较正式地接触后端数据库代码。
+
+### 这个文件负责什么
+
+`request_store.go` 的职责是：
+
+```text
+把已经完成的 Request 写入 SQLite
+从 SQLite 读取已经完成的 Request
+初始化数据库表
+关闭数据库连接
+```
+
+这个文件本质上是一个持久化层：
+
+```text
+System 负责运行逻辑
+RequestStore 负责数据库读写
+SQLite 负责把历史请求保存到磁盘
+```
+
+### import 部分
+
+```go
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+```
+
+逐个看：
+
+```text
+database/sql
+  Go 标准库提供的数据库统一接口。
+  它不直接实现 SQLite、MySQL 或 PostgreSQL，而是定义一套通用操作方式。
+
+fmt
+  用来创建带上下文的 error。
+
+os
+  用来创建数据库目录。
+
+path/filepath
+  用来处理文件路径，例如获取 data/requests.db 的目录 data。
+
+github.com/mattn/go-sqlite3
+  SQLite 驱动。
+```
+
+这里最特殊的是：
+
+```go
+_ "github.com/mattn/go-sqlite3"
+```
+
+前面的 `_` 叫空白导入。意思是：
+
+```text
+我不在代码里直接调用这个包的函数，
+但我要让这个包的 init() 执行，
+从而把 sqlite3 这个数据库驱动注册给 database/sql。
+```
+
+如果没有这行，后面这句会找不到 SQLite 驱动：
+
+```go
+sql.Open("sqlite3", databasePath)
+```
+
+### `RequestStore` 结构体
+
+```go
+type RequestStore struct {
+	db *sql.DB
+}
+```
+
+`RequestStore` 是我们自己定义的一层包装。
+
+`*sql.DB` 是 Go 标准库里的数据库连接池对象。虽然名字叫 `DB`，但它不是一个单独的数据库连接，而是一个可以管理连接的对象。
+
+为什么不直接在 `System` 里放 `*sql.DB`？
+
+因为直接放 `*sql.DB` 会让 `system.go` 里到处出现 SQL 语句，核心运行逻辑会变得很乱。
+
+现在的分工是：
+
+```text
+System:
+  只知道 requestStore.SaveCompletedRequest(...)
+
+RequestStore:
+  知道 SQL 表名、字段名、INSERT / SELECT 语句
+```
+
+这就是一层很薄的封装。
+
+### `OpenRequestStore`
+
+```go
+func OpenRequestStore(databasePath string) (*RequestStore, error)
+```
+
+这个函数负责打开数据库。
+
+流程是：
+
+```text
+1. 检查 databasePath 不能为空
+2. 如果是文件数据库，确保目录存在
+3. 调用 sql.Open("sqlite3", databasePath)
+4. 创建 RequestStore
+5. 调用 initSchema() 确保表存在
+6. 返回 store
+```
+
+这里的：
+
+```go
+sql.Open("sqlite3", databasePath)
+```
+
+意思是：
+
+```text
+使用名为 sqlite3 的驱动
+打开 databasePath 指向的 SQLite 数据库
+```
+
+如果 `databasePath` 是：
+
+```text
+data/requests.db
+```
+
+那么 SQLite 会把数据保存到这个文件。
+
+如果 `databasePath` 是：
+
+```text
+:memory:
+```
+
+那么 SQLite 会创建一个内存数据库，程序结束后数据消失。测试里常用这个，因为不会污染项目目录。
+
+### 为什么要 `initSchema`
+
+```go
+if err := store.initSchema(); err != nil {
+	db.Close()
+	return nil, err
+}
+```
+
+打开数据库文件不等于里面已经有表。
+
+所以启动时要确保表存在。`initSchema()` 里用了：
+
+```sql
+CREATE TABLE IF NOT EXISTS completed_requests (...)
+```
+
+这句 SQL 的意思是：
+
+```text
+如果 completed_requests 表不存在，就创建它；
+如果已经存在，就什么都不做。
+```
+
+这样服务可以重复启动，不会因为表已经存在而报错。
+
+如果建表失败，代码会：
+
+```go
+db.Close()
+return nil, err
+```
+
+这是为了避免数据库已经打开，但初始化失败时连接泄漏。
+
+### `Close`
+
+```go
+func (s *RequestStore) Close() error
+```
+
+后端程序打开数据库后，理论上应该在程序结束时关闭它。
+
+这里先判断：
+
+```go
+if s == nil || s.db == nil {
+	return nil
+}
+```
+
+这是防御式写法。意思是：如果 `RequestStore` 本身不存在，或者里面的 `db` 还没初始化，那关闭操作直接视为成功。
+
+真正关闭数据库的是：
+
+```go
+return s.db.Close()
+```
+
+在 `cmd/server/main.go` 里通常会配合：
+
+```go
+defer system.Close()
+```
+
+这样 `main()` 结束时会释放数据库资源。
+
+### `SaveCompletedRequest`
+
+```go
+func (s *RequestStore) SaveCompletedRequest(request Request) error
+```
+
+这个函数负责把一个完成的请求写入数据库。
+
+核心 SQL 是：
+
+```sql
+INSERT INTO completed_requests (
+	id,
+	floor,
+	direction,
+	kind,
+	status,
+	created_tick,
+	assigned_tick,
+	completed_tick,
+	assigned_elevator_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+```
+
+`INSERT INTO` 表示插入一行数据。
+
+字段列表：
+
+```text
+id
+floor
+direction
+kind
+status
+created_tick
+assigned_tick
+completed_tick
+assigned_elevator_id
+```
+
+和 `Request` 的字段基本一一对应。
+
+`VALUES (?, ?, ...)` 里面的 `?` 是占位符。真正的值在后面传入：
+
+```go
+request.ID,
+request.Floor,
+request.Direction,
+request.Kind,
+request.Status,
+request.CreatedTick,
+request.AssignedTick,
+request.CompletedTick,
+request.AssignedElevatorID,
+```
+
+这样写比自己拼字符串安全，也更标准。
+
+不要写成：
+
+```go
+"INSERT ... VALUES (" + someValue + ")"
+```
+
+因为手动拼 SQL 容易出错，也可能引入 SQL 注入问题。即使当前项目数据主要来自我们自己的类型，仍然应该习惯使用占位符。
+
+这里使用的是：
+
+```go
+s.db.Exec(...)
+```
+
+`Exec` 执行不返回结果集的 SQL，比如 `INSERT` `DELETE` `CREATE TABLE` 等。
+
+### `CompletedRequestCount`
+
+```go
+func (s *RequestStore) CompletedRequestCount() (int, error)
+```
+
+这个函数返回数据库里已经完成的请求数量。
+
+SQL 是：
+
+```sql
+SELECT COUNT(*) FROM completed_requests
+```
+
+这里使用：
+
+```go
+s.db.QueryRow(...).Scan(&count)
+```
+
+`QueryRow` 适合查询只返回一行的 SQL。
+
+`Scan(&count)` 的意思是：
+
+```text
+把数据库查询结果写入 Go 变量 count
+```
+
+注意这里传的是：
+
+```go
+&count
+```
+
+因为 `Scan` 需要修改这个变量，所以要传指针。
+
+### `MaxCompletedRequestID`
+
+```go
+func (s *RequestStore) MaxCompletedRequestID() (int64, error)
+```
+
+这个函数读取数据库里最大的请求 ID。
+
+SQL 是：
+
+```sql
+SELECT MAX(id) FROM completed_requests
+```
+
+用途是：系统重启后，新的请求 ID 不要又从 1 开始。
+
+如果数据库里已经有：
+
+```text
+id = 1, 2, 3
+```
+
+那么最大 ID 是 3，系统下一个请求应该从 4 开始。
+
+这里用了：
+
+```go
+var maxID sql.NullInt64
+```
+
+为什么不用普通 `int64`？
+
+因为如果表是空的：
+
+```sql
+SELECT MAX(id) FROM completed_requests
+```
+
+返回的是 SQL 里的 `NULL`，不是 0。
+
+`sql.NullInt64` 可以表达两种状态：
+
+```text
+Valid == true
+  数据库真的返回了一个整数
+
+Valid == false
+  数据库返回的是 NULL
+```
+
+所以代码里有：
+
+```go
+if !maxID.Valid {
+	return 0, nil
+}
+return maxID.Int64, nil
+```
+
+意思是：如果表里还没有任何历史请求，就认为最大 ID 是 0。
+
+### `CompletedRequestByID`
+
+```go
+func (s *RequestStore) CompletedRequestByID(requestID int64) (*Request, error)
+```
+
+这个函数按 ID 查询一条已经完成的请求。
+
+SQL 是：
+
+```sql
+SELECT
+	id,
+	floor,
+	direction,
+	kind,
+	status,
+	created_tick,
+	assigned_tick,
+	completed_tick,
+	assigned_elevator_id
+FROM completed_requests
+WHERE id = ?
+```
+
+`WHERE id = ?` 表示只查指定 ID 的那一行。
+
+后面的：
+
+```go
+`, requestID).Scan(
+	&request.ID,
+	&request.Floor,
+	&request.Direction,
+	&request.Kind,
+	&request.Status,
+	&request.CreatedTick,
+	&request.AssignedTick,
+	&request.CompletedTick,
+	&request.AssignedElevatorID,
+)
+```
+
+表示：
+
+```text
+把查询出来的每一列，按顺序写入 request 的对应字段。
+```
+
+这里字段顺序很重要。
+
+SQL 里 SELECT 的顺序是：
+
+```text
+id, floor, direction, kind, ...
+```
+
+`Scan` 里的目标也必须按这个顺序写：
+
+```text
+&request.ID, &request.Floor, &request.Direction, &request.Kind, ...
+```
+
+如果顺序写错，就会把数据库里的列读到错误字段里。
+
+### `initSchema`
+
+```go
+func (s *RequestStore) initSchema() error
+```
+
+这个函数负责建表。
+
+SQL：
+
+```sql
+CREATE TABLE IF NOT EXISTS completed_requests (
+	id INTEGER PRIMARY KEY,
+	floor INTEGER NOT NULL,
+	direction TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	status TEXT NOT NULL,
+	created_tick INTEGER NOT NULL,
+	assigned_tick INTEGER NOT NULL,
+	completed_tick INTEGER NOT NULL,
+	assigned_elevator_id INTEGER NOT NULL
+)
+```
+
+逐个看：
+
+```text
+id INTEGER PRIMARY KEY
+  id 是主键。主键用于唯一标识一行记录。
+
+floor INTEGER NOT NULL
+  floor 是整数，并且不能为空。
+
+direction TEXT NOT NULL
+  direction 是文本，例如 up/down/idle。
+
+kind TEXT NOT NULL
+  kind 是文本，例如 hall/cabin。
+
+status TEXT NOT NULL
+  status 是文本，例如 done。
+
+created_tick / assigned_tick / completed_tick
+  都是整数 tick。
+
+assigned_elevator_id INTEGER NOT NULL
+  记录这个请求被哪部电梯完成。
+```
+
+`NOT NULL` 表示这一列不允许为空。
+
+这对当前项目很合适，因为一个完整的完成请求应该总能提供这些字段。
+
+### `ensureDatabaseDirectory`
+
+```go
+func ensureDatabaseDirectory(databasePath string) error
+```
+
+这个函数负责确保数据库文件所在目录存在。
+
+如果路径是：
+
+```text
+data/requests.db
+```
+
+那么：
+
+```go
+filepath.Dir(databasePath)
+```
+
+会得到：
+
+```text
+data
+```
+
+然后：
+
+```go
+os.MkdirAll(dir, 0755)
+```
+
+会创建这个目录。
+
+`MkdirAll` 的特点是：
+
+```text
+目录不存在就创建
+目录已经存在也不会报错
+可以一次创建多级目录
+```
+
+为什么要特殊处理：
+
+```go
+if databasePath == ":memory:" {
+	return nil
+}
+```
+
+因为 `:memory:` 不是文件路径，而是 SQLite 的特殊写法，表示内存数据库。它没有目录，也不应该创建目录。
+
+### 这个文件的整体调用链
+
+后端启动时：
+
+```text
+main.go
+  -> NewSystem(...)
+    -> OpenRequestStore(...)
+      -> initSchema()
+```
+
+请求完成时：
+
+```text
+Step()
+  -> stepElevator()
+    -> completeRequest()
+      -> requestStore.SaveCompletedRequest()
+      -> delete(System.Requests, requestID)
+```
+
+测试读取数据库时：
+
+```text
+system.requestStore.CompletedRequestCount()
+system.requestStore.CompletedRequestByID(...)
+```
+
+### 后端数据库代码的基本模式
+
+这个文件体现了后端写数据库时的一个常见模式：
+
+```text
+1. 定义一个 Store / Repository 类型
+2. Store 内部持有数据库连接
+3. 初始化时建表或检查 schema
+4. 对外暴露业务语义函数，而不是暴露 SQL
+5. 调用方只调用 Save / Find / Count 这类函数
+```
+
+例如这里不是让 `system.go` 写：
+
+```go
+db.Exec("INSERT INTO completed_requests ...")
+```
+
+而是写：
+
+```go
+s.requestStore.SaveCompletedRequest(completedRequest)
+```
+
+这样 `system.go` 读起来仍然是在表达业务逻辑：
+
+```text
+完成请求
+保存历史
+从运行态请求表删除
+```
+
+而不是被 SQL 细节打断。

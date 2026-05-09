@@ -25,11 +25,15 @@ func OpenRequestStore(databasePath string) (*RequestStore, error) {
 	}
 
 	db, err := sql.Open("sqlite3", databasePath)
+	// 如果 databasePath 是 ":memory:"，SQLite 会在内存中创建一个临时数据库，
+	// 程序结束后会自动销毁，不会留下文件。
+	// 如果是 data/requests.db，则 SQLite 会把数据保存到这个文件
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
 
 	store := &RequestStore{db: db}
+	// initSchema 创建表结构，如果表已经存在则什么也不做
 	if err := store.initSchema(); err != nil {
 		db.Close()
 		return nil, err
@@ -39,6 +43,7 @@ func OpenRequestStore(databasePath string) (*RequestStore, error) {
 
 // Close 关闭底层数据库连接。
 func (s *RequestStore) Close() error {
+	// 这里的防御性编程我也不知道有什么用
 	if s == nil || s.db == nil {
 		return nil
 	}
@@ -86,6 +91,7 @@ func (s *RequestStore) CompletedRequestCount() (int, error) {
 	}
 
 	var count int
+	// Go 很喜欢 .Scan() 传指针作为输出的设计
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM completed_requests`).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count completed requests: %w", err)
@@ -101,6 +107,9 @@ func (s *RequestStore) MaxCompletedRequestID() (int64, error) {
 	}
 
 	var maxID sql.NullInt64
+	//sql.NullInt64 可以表达两种状态：
+	// Valid == true 时，Int64 字段包含有效值；
+	// Valid == false 时，表示数据库中的值是 NULL，此时 Int64 字段的值应该被忽略。
 	err := s.db.QueryRow(`SELECT MAX(id) FROM completed_requests`).Scan(&maxID)
 	if err != nil {
 		return 0, fmt.Errorf("read max completed request id: %w", err)
@@ -142,6 +151,9 @@ func (s *RequestStore) CompletedRequestByID(requestID int64) (*Request, error) {
 		&request.CompletedTick,
 		&request.AssignedElevatorID,
 	)
+	// requestID 是如何传入 `?` 的？
+	// QueryRow 的 参数列表：(query String, args ...any)
+	// 第二个可变参数依次匹配 query 中的 `?` 占位符，最终形成完整的 SQL 语句。
 	if err != nil {
 		return nil, fmt.Errorf("read completed request %d: %w", requestID, err)
 	}
