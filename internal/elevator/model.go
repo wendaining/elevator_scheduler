@@ -134,3 +134,12 @@ type System struct {
 
 	nextRequestID int64
 }
+
+type SystemConfig struct {
+	Floors           int
+	ElevatorCount    int
+	TicksPerFloor    int
+	DoorBaseTicks    int
+	TickPerPassenger int
+	DatabasePath     string
+}

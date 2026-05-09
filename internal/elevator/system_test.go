@@ -6,7 +6,15 @@ import (
 )
 
 func TestStepMovesElevatorAfterRequest(t *testing.T) {
-	system, err := NewSystem(20, 5, 1, 2, 1)
+	// system, err := NewSystem(20, 5, 1, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -48,7 +56,14 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 }
 
 func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
-	system, err := NewSystem(20, 5, 1, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -115,7 +130,14 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 }
 
 func TestStepUsesTicksPerFloor(t *testing.T) {
-	system, err := NewSystem(20, 5, 3, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    3,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -159,7 +181,14 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 }
 
 func TestNewSystemStoresTimingParameters(t *testing.T) {
-	system, err := NewSystem(12, 3, 7, 4, 2)
+	system, err := NewSystem(SystemConfig{
+		Floors:           12,
+		ElevatorCount:    3,
+		TicksPerFloor:    7,
+		DoorBaseTicks:    4,
+		TickPerPassenger: 2,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -184,7 +213,14 @@ func TestNewSystemStoresTimingParameters(t *testing.T) {
 func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "requests.db")
 
-	firstSystem, err := NewSystemWithDatabase(20, 5, 1, 2, 1, databasePath)
+	firstSystem, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     databasePath,
+	})
 	if err != nil {
 		t.Fatalf("NewSystemWithDatabase returned error: %v", err)
 	}
@@ -202,7 +238,14 @@ func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 		t.Fatalf("Close returned error: %v", err)
 	}
 
-	secondSystem, err := NewSystemWithDatabase(20, 5, 1, 2, 1, databasePath)
+	secondSystem, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     databasePath,
+	})
 	if err != nil {
 		t.Fatalf("second NewSystemWithDatabase returned error: %v", err)
 	}

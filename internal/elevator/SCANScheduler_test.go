@@ -3,7 +3,14 @@ package elevator
 import "testing"
 
 func TestSCANSchedulerAssignsRequestInScanDirection(t *testing.T) {
-	system, err := NewSystem(20, 1, 5, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    1,
+		TicksPerFloor:    5,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     "testdata/empty.db",
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -36,7 +43,14 @@ func TestSCANSchedulerAssignsRequestInScanDirection(t *testing.T) {
 }
 
 func TestSCANSchedulerReversesWhenNoRequestInScanDirection(t *testing.T) {
-	system, err := NewSystem(20, 1, 5, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    1,
+		TicksPerFloor:    5,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     "testdata/empty.db",
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -65,7 +79,14 @@ func TestSCANSchedulerReversesWhenNoRequestInScanDirection(t *testing.T) {
 }
 
 func TestSCANSchedulerAppendsUpRequestAlongTheWay(t *testing.T) {
-	system, err := NewSystem(20, 1, 5, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    1,
+		TicksPerFloor:    5,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     "testdata/empty.db",
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -97,7 +118,14 @@ func TestSCANSchedulerAppendsUpRequestAlongTheWay(t *testing.T) {
 }
 
 func TestSCANSchedulerAppendsDownRequestAlongTheWay(t *testing.T) {
-	system, err := NewSystem(20, 1, 5, 2, 1)
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    1,
+		TicksPerFloor:    5,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     "testdata/empty.db",
+	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}

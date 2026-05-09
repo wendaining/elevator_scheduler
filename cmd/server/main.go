@@ -14,16 +14,17 @@ func main() {
 		defaultTicksPerFloor    = 5
 		defaultDoorBaseTicks    = 2
 		defaultTickPerPassenger = 1
+		defaultDatabasePath     = "data/requests.db"
 	)
 
-	system, err := elevator.NewSystemWithDatabase(
-		defaultFloorCount,
-		defaultElevatorCount,
-		defaultTicksPerFloor,
-		defaultDoorBaseTicks,
-		defaultTickPerPassenger,
-		"data/requests.db",
-	)
+	system, err := elevator.NewSystem(elevator.SystemConfig{
+		Floors:           defaultFloorCount,
+		ElevatorCount:    defaultElevatorCount,
+		TicksPerFloor:    defaultTicksPerFloor,
+		DoorBaseTicks:    defaultDoorBaseTicks,
+		TickPerPassenger: defaultTickPerPassenger,
+		DatabasePath:     defaultDatabasePath,
+	})
 	if err != nil {
 		log.Fatalf("failed to create elevator system: %v", err)
 	}

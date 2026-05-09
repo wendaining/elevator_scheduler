@@ -5880,4 +5880,7 @@ internal/elevator: ok
 
 ### 2026-05-08 关于数据库持久化的一个思考
 
-其实我觉得 `MaxCompletedRequestID` 的设计不太合理。
+其实我觉得现在有两个设计不太合理：
+
+1. `MaxCompletedRequestID` 的设计不太合理。其实我的理想情况是每次的 `RequestID` 都直接从 0 开始计数，每次不同的运行会新建一个表。但是这里又有新的问题：什么是“一次运行”？我发现我不是很说得清楚，因为我对最终的界面的设想其实还不是很完善。
+2. `NewSystemWithDatabase` 的设计我也觉得很烂...因为这里相当于是 `NewSystem` 返回一个 `NewSystemWithDataSystem` 的闭包，我姑且认为这样的设计的缘由是为了向前兼容，防止重构太多东西，但是有点又臭又长了，我不是很喜欢。 Update: 已修改

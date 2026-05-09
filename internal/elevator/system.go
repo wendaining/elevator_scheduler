@@ -8,50 +8,25 @@ import (
 
 // NewSystem 是 System 的构造函数，接收楼层数、电梯数量和基础时间参数，返回初始化后的系统。
 // 如果参数不合法（小于 1），返回错误。
-func NewSystem(
-	floors int,
-	elevatorCount int,
-	ticksPerFloor int,
-	doorBaseTicks int,
-	tickPerPassenger int,
-) (*System, error) {
-	return NewSystemWithDatabase(
-		floors,
-		elevatorCount,
-		ticksPerFloor,
-		doorBaseTicks,
-		tickPerPassenger,
-		":memory:",
-	)
-}
-
-// NewSystemWithDatabase 创建电梯系统，并把已完成请求持久化到指定 SQLite 数据库。
-func NewSystemWithDatabase(
-	floors int,
-	elevatorCount int,
-	ticksPerFloor int,
-	doorBaseTicks int,
-	tickPerPassenger int,
-	databasePath string,
-) (*System, error) {
+func NewSystem(sc SystemConfig) (*System, error) {
 	// 数据合法性检查
-	if floors < 1 {
-		return nil, fmt.Errorf("floors must be at least 1, got %d", floors)
+	if sc.Floors < 1 {
+		return nil, fmt.Errorf("floors must be at least 1, got %d", sc.Floors)
 	}
-	if elevatorCount < 1 {
-		return nil, fmt.Errorf("elevator count must be at least 1, got %d", elevatorCount)
+	if sc.ElevatorCount < 1 {
+		return nil, fmt.Errorf("elevator count must be at least 1, got %d", sc.ElevatorCount)
 	}
-	if ticksPerFloor < 1 {
-		return nil, fmt.Errorf("ticks per floor must be at least 1, got %d", ticksPerFloor)
+	if sc.TicksPerFloor < 1 {
+		return nil, fmt.Errorf("ticks per floor must be at least 1, got %d", sc.TicksPerFloor)
 	}
-	if doorBaseTicks < 0 {
-		return nil, fmt.Errorf("door base ticks must be at least 0, got %d", doorBaseTicks)
+	if sc.DoorBaseTicks < 0 {
+		return nil, fmt.Errorf("door base ticks must be at least 0, got %d", sc.DoorBaseTicks)
 	}
-	if tickPerPassenger < 0 {
-		return nil, fmt.Errorf("tick per passenger must be at least 0, got %d", tickPerPassenger)
+	if sc.TickPerPassenger < 0 {
+		return nil, fmt.Errorf("tick per passenger must be at least 0, got %d", sc.TickPerPassenger)
 	}
 
-	requestStore, err := OpenRequestStore(databasePath)
+	requestStore, err := OpenRequestStore(sc.DatabasePath)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +36,7 @@ func NewSystemWithDatabase(
 		return nil, err
 	}
 
-	elevators := make([]Elevator, elevatorCount)
+	elevators := make([]Elevator, sc.ElevatorCount)
 	for i := range elevators {
 		elevators[i] = Elevator{
 			ID:                 i + 1,
@@ -79,11 +54,11 @@ func NewSystemWithDatabase(
 	scheduler := FirstAvailableScheduler{}
 
 	return &System{
-		FloorCount:       floors,
+		FloorCount:       sc.Floors,
 		CurrentTick:      0,
-		TicksPerFloor:    ticksPerFloor,
-		DoorBaseTicks:    doorBaseTicks,
-		TickPerPassenger: tickPerPassenger,
+		TicksPerFloor:    sc.TicksPerFloor,
+		DoorBaseTicks:    sc.DoorBaseTicks,
+		TickPerPassenger: sc.TickPerPassenger,
 		Elevators:        elevators,
 		Requests:         map[int64]*Request{},
 		SchedulerName:    scheduler.Name(),
