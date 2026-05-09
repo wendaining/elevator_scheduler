@@ -6506,3 +6506,170 @@ s.requestStore.SaveCompletedRequest(completedRequest)
 ```
 
 而不是被 SQL 细节打断。
+
+## 2026-05-09：重构 `POST /api/request`
+
+这次把 `internal/api/handler.go` 里的 `POST /api/request` 改成了更符合当前 `Request` 模型的版本。
+
+### 客户端现在应该提交什么
+
+前端或 curl 只需要提交客户端真正知道的信息：
+
+```json
+{
+  "floor": 4,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+也就是：
+
+```text
+floor      请求楼层
+direction  hall 请求的方向，up/down；cabin 请求用 idle
+kind       hall 或 cabin
+```
+
+客户端不应该提交：
+
+```text
+id
+status
+createdTick
+assignedTick
+completedTick
+assignedElevatorId
+```
+
+这些字段都属于后端运行状态，应该由 `System.AddRequest()` 创建。
+
+### 为什么不能让客户端传完整 `Request`
+
+之前 handler 直接把请求体解码成：
+
+```go
+var request elevator.Request
+```
+
+这会让 API 语义变得不清楚：客户端看起来可以自己指定 `ID`、`Status`、tick 字段。
+
+但当前模型里：
+
+```text
+ID                由 nextRequestID 生成
+Status            新请求默认是 pending
+CreatedTick        使用当前 System.CurrentTick
+AssignedTick       调度时填写
+CompletedTick      电梯到站完成时填写
+AssignedElevatorID 调度时填写
+```
+
+所以 handler 现在定义了专门的请求体结构：
+
+```go
+type createRequestPayload struct {
+	Floor     int                 `json:"floor"`
+	Direction elevator.Direction `json:"direction"`
+	Kind      elevator.RequestKind `json:"kind"`
+}
+```
+
+这个结构只表达“创建请求时客户端能提供的输入”。
+
+### 创建请求的调用链
+
+现在 `POST /api/request` 的主要流程是：
+
+```text
+1. 检查必须是 POST 方法
+2. 解析 JSON 请求体
+3. 校验 floor、direction、kind
+4. 调用 System.AddRequest(floor, direction, kind)
+5. 返回后端创建出来的 Request
+```
+
+返回示例大致是：
+
+```json
+{
+  "status": "accepted",
+  "currentTick": 0,
+  "request": {
+    "id": 1,
+    "floor": 4,
+    "direction": "up",
+    "kind": "hall",
+    "status": "pending",
+    "createdTick": 0,
+    "assignedTick": 0,
+    "completedTick": 0,
+    "assignedElevatorId": 0
+  }
+}
+```
+
+这里可以看到：客户端只传了 3 个字段，但后端返回的是完整 `Request`。
+
+### 错误处理
+
+这次补充了统一 JSON 错误响应：
+
+```json
+{
+  "error": "floor must be between 1 and 20, got 30"
+}
+```
+
+错误场景包括：
+
+```text
+不是 POST 方法
+请求体不是合法 JSON
+请求体为空
+请求体包含未知字段，例如 id/status
+floor 越界
+kind 不是 hall/cabin
+direction 不是 up/down/idle
+hall request 使用 idle 方向
+cabin request 使用非 idle 方向
+```
+
+其中“拒绝未知字段”由：
+
+```go
+decoder.DisallowUnknownFields()
+```
+
+实现。这样如果客户端提交：
+
+```json
+{
+  "id": 99,
+  "floor": 4,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+后端会返回 `400 Bad Request`，因为 `id` 不应该由客户端指定。
+
+### 本次测试
+
+新增了 `internal/api/handler_test.go`，覆盖：
+
+```text
+合法请求会创建后端拥有的 Request
+客户端提交 id/status 会被拒绝
+hall 请求不能使用 idle
+cabin 请求不能使用 up/down
+非法 JSON 会被拒绝
+```
+
+已运行：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+结果通过。

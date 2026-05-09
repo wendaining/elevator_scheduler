@@ -206,34 +206,21 @@
 - [x] 在 `completeRequest` 函数里面修改为每次完成请求的时候，把这个 Request 写入数据库
 - [x] 删除历史请求的数据结构
 - [x] 在 `docs/record.md` 记录实现
-- [ ] 做一次小提交，例如 `feat: persist completed requests`
+- [x] 做一次小提交，例如 `feat: persist completed requests`
 
 ### 6.5.8 重构现有算法和 API
 
 目标：让现有 FCFS、Nearest、SCAN/LOOK、HTTP API 都适配新模型。
 
-- [ ] 重构 FCFS：从 `Requests` 中选择最早的 pending 请求
-- [ ] 重构 Nearest：基于 pending 请求和电梯当前位置选择候选电梯
+- [x] 重构 FCFS：从 `Requests` 中选择最早的 pending 请求
+- [x] 重构 Nearest：基于 pending 请求和电梯当前位置选择候选电梯
 - [ ] 重构 SCAN/LOOK：基于 `Stops`、`ScanDirection` 和请求方向追加或分配停靠计划
-- [ ] 重构 `POST /api/request`：创建请求，不引入人数参数
-- [ ] 重构 `GET /api/state`：返回 tick、requests、elevators、schedulerName
-- [ ] 保持 API 错误处理清晰，例如非法楼层、非法方向、非法请求类型
+- [x] 重构 `POST /api/request`：基于新的 `Request` 的设计创建请求
+- [x] 保持 API 错误处理清晰，例如非法楼层、非法方向、非法请求类型
 - [ ] 用 `curl` 验证新请求模型能从 API 进入系统
 - [ ] 跑通 `go test ./...`
 - [ ] 在 `docs/record.md` 记录新状态 JSON 的关键字段
 - [ ] 做一次小提交，例如 `feat: adapt api to request state model`
-
-### 6.5 提交拆分要求
-
-这个阶段禁止把所有重构塞进一个提交。
-
-每个提交都应满足：
-
-- [ ] 能用一句话说明这次改动的边界
-- [ ] 不混入前端 UI 改动
-- [ ] 包含必要测试或至少保留明确的验证方式
-- [ ] 提交前运行 `gofmt` 和 `go test ./...`
-- [ ] 如果某个提交暂时导致 API 返回字段变化，必须同步更新 `docs/record.md` 说明
 
 ## 7. 引入并发模型
 
@@ -277,7 +264,7 @@
 
 目标：在最小功能可靠后，再改善展示效果。
 
-前端改动顺序：只有在调度算法、并发模型、以及切换调度算法的 API 都完成之后，才继续修改前端。前端的目标是增加一个类似下拉菜单的控件，用于选择当前调度算法。
+前端改动顺序：只有在调度算法、并发模型、以及切换调度算法的 API 都完成之后，才继续修改前端。
 
 - [ ] 显示电梯开门 / 关门状态
 - [ ] 显示每部电梯的目标楼层或任务队列

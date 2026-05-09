@@ -13,6 +13,12 @@ func IsValidRequestKind(kind RequestKind) bool {
 		kind == RequestKindCabin
 }
 
+func IsValidRequestStatus(status RequestStatus) bool {
+	return status == RequestPending ||
+		status == RequestAssigned ||
+		status == RequestDone
+}
+
 func canAcceptRequest(e Elevator) bool {
 	return !e.EmergencyStop && len(e.Stops) == 0
 }
