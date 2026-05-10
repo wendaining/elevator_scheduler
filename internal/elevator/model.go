@@ -1,5 +1,7 @@
 package elevator
 
+import "sync"
+
 // Direction 是一个自定义的字符串类型。
 //
 // Go 语法说明：
@@ -103,6 +105,8 @@ type Elevator struct {
 //
 // 在第一版模型中，此结构体仅描述状态。它尚未包含 goroutine、channel 或调度算法。
 type System struct {
+	mu sync.Mutex
+
 	FloorCount int `json:"floorCount"`
 
 	// CurrentTick 是整个模拟系统的全局离散时钟。

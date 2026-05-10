@@ -134,11 +134,18 @@ func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 
 	deadline := time.After(200 * time.Millisecond)
 	for {
-		server.mu.Lock()
-		currentTick := server.System.CurrentTick
-		server.mu.Unlock()
+		data, err := server.System.Snapshot()
+		if err != nil {
+			t.Fatalf("Snapshot returned error: %v", err)
+		}
 
-		if currentTick > 0 {
+		var snapshot struct {
+			CurrentTick int `json:"currentTick"`
+		}
+		if err := json.Unmarshal(data, &snapshot); err != nil {
+			t.Fatalf("Unmarshal snapshot returned error: %v", err)
+		}
+		if snapshot.CurrentTick > 0 {
 			return
 		}
 

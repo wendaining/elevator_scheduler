@@ -7,14 +7,12 @@ import (
 	"io"
 	"net/http"
 	"os_sp26_proj1/internal/elevator"
-	"sync"
 )
 
 // Server 持有所有 HTTP handler 需要的依赖。
 // 后续新增的依赖（配置、日志等）只需要在这里加字段，不影响 handler 函数签名。
 type Server struct {
 	System *elevator.System
-	mu     sync.Mutex
 }
 
 // RegisterRoutes 把所有 API 路由注册到 mux 上。
@@ -49,9 +47,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
 	data, err := s.System.Snapshot()
-	s.mu.Unlock()
 	if err != nil {
 		http.Error(w, "failed to get snapshot", http.StatusInternalServerError)
 		return
@@ -78,24 +74,17 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-	createdRequest, err := s.System.AddRequest(payload.Floor, payload.Direction, payload.Kind)
+	createdRequest, err := s.System.AddRequestSnapshot(payload.Floor, payload.Direction, payload.Kind)
 	if err != nil {
-		s.mu.Unlock()
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// createdRequest 是指针，直接放到 response 里会有并发安全问题，
-	// 所以这里复制一份快照
-	createdRequestSnapshot := *createdRequest
-	currentTick := s.System.CurrentTick
 
 	response := map[string]any{
 		"status":      "accepted",
-		"currentTick": currentTick,
-		"request":     createdRequestSnapshot,
+		"currentTick": createdRequest.CreatedTick,
+		"request":     createdRequest,
 	}
-	s.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
@@ -110,15 +99,12 @@ func (s *Server) handleStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
 	if err := s.System.Step(); err != nil {
-		s.mu.Unlock()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	data, err := s.System.Snapshot()
-	s.mu.Unlock()
 	if err != nil {
 		http.Error(w, "failed to get snapshot", http.StatusInternalServerError)
 		return

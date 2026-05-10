@@ -71,6 +71,25 @@ func NewSystem(sc SystemConfig) (*System, error) {
 // AddRequest 向系统添加一个新的乘梯请求。先校验参数是否合法，再将请求保存到
 // Requests 中，并用 Status 标记它当前处于 pending 状态。
 func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*Request, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.addRequestLocked(floor, direction, kind)
+}
+
+// AddRequestSnapshot 创建请求并返回这个请求的值拷贝，适合 API 层返回给客户端。
+func (s *System) AddRequestSnapshot(floor int, direction Direction, kind RequestKind) (Request, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	request, err := s.addRequestLocked(floor, direction, kind)
+	if err != nil {
+		return Request{}, err
+	}
+	return *request, nil
+}
+
+func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKind) (*Request, error) {
 	if floor < 1 || floor > s.FloorCount {
 		return nil, fmt.Errorf("floor must be between 1 and %d, got %d", s.FloorCount, floor)
 	}
@@ -99,6 +118,9 @@ func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*
 
 // SetScheduler 根据名称切换调度算法。
 func (s *System) SetScheduler(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	scheduler, err := NewScheduler(name)
 	if err != nil {
 		return err
@@ -114,11 +136,18 @@ func (s *System) Close() error {
 	if s == nil {
 		return nil
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return s.requestStore.Close()
 }
 
 // Snapshot 返回系统当前状态的 JSON 快照，带缩进格式，便于调试和 HTTP API 使用。
 func (s *System) Snapshot() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return json.MarshalIndent(s, "", "  ")
 }
 
@@ -127,6 +156,13 @@ func (s *System) Snapshot() ([]byte, error) {
 // 1. 调度器尝试分配请求。调度是即时决策，不额外消耗 tick。
 // 2. 每部电梯执行一个行动单位，例如移动倒计时、开门倒计时或空闲等待。
 func (s *System) Step() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.stepLocked()
+}
+
+func (s *System) stepLocked() error {
 	if len(s.Elevators) == 0 {
 		return fmt.Errorf("system has no elevators")
 	}
