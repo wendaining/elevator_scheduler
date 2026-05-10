@@ -225,13 +225,15 @@
 
 目标：满足课程中“每部电梯作为独立执行单元”的要求。
 
-- [ ] 在 tick、Requests、Stops、基础调度器都稳定后，再开始加入 goroutine
+这个部分不要一次完成所有 checkbox，应当一次只完成 1~2 个 checkbox，但是具体还是根据使用者的 prompt 而定。
+
+- [x] 在 tick、Requests、Stops、基础调度器都稳定后，再开始加入 goroutine
 - [ ] 设计每部电梯的运行循环
 - [ ] 使用 channel 传递请求或控制信号
-- [ ] 使用 mutex 或单线程事件循环保护共享状态，避免数据竞争
-- [ ] 明确哪些状态由调度器维护，哪些状态由电梯维护
-- [ ] 学习并运行 `go test -race` 或类似方式检查数据竞争
-- [ ] 在 `docs/record.md` 记录：并发版本相比同步版本改变了什么
+- [x] 使用 mutex 或单线程事件循环保护共享状态，避免数据竞争
+- [x] 明确哪些状态由调度器维护，哪些状态由电梯维护
+- [x] 学习并运行 `go test -race` 或类似方式检查数据竞争
+- [x] 在 `docs/record.md` 记录：并发版本相比同步版本改变了什么
 - [ ] 做一次小提交，例如 `feat: run elevators concurrently`
 
 完成本阶段后，再回到 API 层，为调度算法切换提供 HTTP 路由。

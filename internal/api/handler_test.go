@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os_sp26_proj1/internal/elevator"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHandleRequestCreatesBackendOwnedRequest(t *testing.T) {
@@ -121,6 +123,32 @@ func TestHandleRequestRejectsInvalidJSON(t *testing.T) {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 	assertTextError(t, response.Body.String())
+}
+
+func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
+	server := newTestServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	server.StartAutoStep(ctx, time.Millisecond)
+
+	deadline := time.After(200 * time.Millisecond)
+	for {
+		server.mu.Lock()
+		currentTick := server.System.CurrentTick
+		server.mu.Unlock()
+
+		if currentTick > 0 {
+			return
+		}
+
+		select {
+		case <-deadline:
+			t.Fatal("auto step did not advance CurrentTick")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
 }
 
 func newTestServer(t *testing.T) *Server {

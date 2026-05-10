@@ -7627,3 +7627,541 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
 ```
 
 结果通过。
+
+## 2026-05-10：引入最小并发模型
+
+本阶段开始做 `docs/instructions-from-agent.md` 的第 7 部分：引入并发模型。
+
+这次不是直接实现“每部电梯一个 goroutine”的完整版本，而是先做一个很小、能读懂、能验证的数据竞争安全版本：
+
+```text
+一个后台 goroutine 定时调用 System.Step()
+API handler 仍然处理 HTTP 请求
+后台 goroutine 和 API handler 通过同一把 mutex 保护 System
+```
+
+也就是说，系统现在第一次真的有了两个并发执行路径：
+
+```text
+路径 1：HTTP API
+  用户提交请求、查看状态、手动 step
+
+路径 2：后台自动 step
+  定时推进电梯运行
+```
+
+### 先补 Go 并发最小概念
+
+Go 并发里最常见的几个词：
+
+```text
+goroutine
+  Go 的轻量并发执行单元。
+  用 go f() 启动，表示让 f 在后台并发运行。
+
+channel
+  goroutine 之间传消息的管道。
+  本轮暂时没有引入 channel，后续“每部电梯一个 goroutine”时再考虑。
+
+mutex
+  互斥锁，用来保护共享变量。
+  同一时间只能有一个 goroutine 拿到这把锁。
+
+select
+  等待多个 channel 事件。
+  本轮在后台循环里用它同时等待 ticker 和 ctx.Done()。
+
+context
+  用来控制 goroutine 退出。
+  本轮用 context 让后台自动 step 循环可以停止。
+```
+
+如果和 POSIX 线程类比：
+
+```text
+goroutine 类似更轻量的线程
+mutex 和 pthread_mutex 类似
+channel 是 Go 更强调的消息传递工具
+context 是 Go 服务端常用的取消机制
+```
+
+如果和 JavaScript 异步类比：
+
+```text
+JS async/await 多数时候还是单线程事件循环
+Go goroutine 可以真的并发执行
+所以 Go 里共享变量如果不加锁，会出现数据竞争
+```
+
+### 新增 `internal/api/runner.go`
+
+新增文件：
+
+```text
+internal/api/runner.go
+```
+
+核心代码：
+
+```go
+func (s *Server) StartAutoStep(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.mu.Lock()
+				if err := s.System.Step(); err != nil {
+					log.Printf("auto step failed: %v", err)
+				}
+				s.mu.Unlock()
+			}
+		}
+	}()
+}
+```
+
+逐段解释。
+
+### `go func() { ... }()`
+
+```go
+go func() {
+	...
+}()
+```
+
+这表示启动一个新的 goroutine。
+
+如果没有 `go`：
+
+```go
+func() {
+	...
+}()
+```
+
+这段代码会在当前 goroutine 里执行，`StartAutoStep` 会卡在无限循环里，后端无法继续启动 HTTP 服务。
+
+加上 `go` 后：
+
+```text
+StartAutoStep 启动后台循环
+然后立刻返回
+main.go 继续注册路由并启动 HTTP server
+```
+
+### `time.NewTicker`
+
+```go
+ticker := time.NewTicker(interval)
+defer ticker.Stop()
+```
+
+`Ticker` 表示一个固定间隔的时钟。
+
+如果 interval 是：
+
+```go
+500 * time.Millisecond
+```
+
+那么大约每 500ms，`ticker.C` 这个 channel 会收到一次事件。
+
+也就是说：
+
+```text
+每过一个 interval
+后台 goroutine 就有机会调用一次 System.Step()
+```
+
+`defer ticker.Stop()` 表示函数退出时停止 ticker，避免资源泄漏。
+
+### `select`
+
+```go
+select {
+case <-ctx.Done():
+	return
+case <-ticker.C:
+	...
+}
+```
+
+`select` 用来等待多个 channel。
+
+这里有两个事件：
+
+```text
+ctx.Done()
+  外部要求后台 goroutine 停止
+
+ticker.C
+  到了下一次自动 step 时间
+```
+
+如果收到 `ctx.Done()`：
+
+```go
+return
+```
+
+后台 goroutine 结束。
+
+如果收到 `ticker.C`：
+
+```go
+s.System.Step()
+```
+
+推进系统一个时间片。
+
+### 为什么要加 mutex
+
+`System` 是共享状态。
+
+它里面有：
+
+```text
+CurrentTick
+Elevators
+Requests
+Stops
+scheduler
+```
+
+现在有多个地方会访问它：
+
+```text
+GET /api/state
+  读取 System，生成 JSON 快照
+
+POST /api/request
+  修改 Requests，创建新请求
+
+POST /api/step
+  手动调用 Step，修改电梯状态
+
+后台 goroutine
+  定时调用 Step，修改电梯状态
+```
+
+如果没有锁，可能出现这种情况：
+
+```text
+后台 goroutine 正在修改 Elevators
+同时 GET /api/state 正在读取 Elevators 并编码 JSON
+```
+
+这就是数据竞争。
+
+Go 里数据竞争不是“偶尔结果不准”这么简单，它可能导致非常隐蔽的 bug。并发代码必须明确共享状态由谁保护。
+
+### `Server` 里新增 mutex
+
+`internal/api/handler.go` 里：
+
+```go
+type Server struct {
+	System *elevator.System
+	mu     sync.Mutex
+}
+```
+
+`mu` 是一把互斥锁。
+
+约定是：
+
+```text
+凡是 handler 或后台 goroutine 要读写 System，都先 Lock
+读写结束后 Unlock
+```
+
+### `GET /api/state` 如何加锁
+
+```go
+s.mu.Lock()
+data, err := s.System.Snapshot()
+s.mu.Unlock()
+```
+
+`Snapshot()` 会读取整个 `System` 并编码成 JSON。
+
+所以它必须在锁内完成，避免编码到一半时另一个 goroutine 修改了 `System`。
+
+### `POST /api/request` 如何加锁
+
+```go
+s.mu.Lock()
+createdRequest, err := s.System.AddRequest(...)
+...
+createdRequestSnapshot := *createdRequest
+currentTick := s.System.CurrentTick
+s.mu.Unlock()
+```
+
+`AddRequest()` 会修改：
+
+```text
+Requests map
+nextRequestID
+```
+
+所以要加锁。
+
+这里还有一个细节：
+
+```go
+createdRequestSnapshot := *createdRequest
+```
+
+`createdRequest` 是指向运行态请求的指针。如果解锁后再把这个指针交给 JSON 编码器，后台 goroutine 可能同时修改这个请求。
+
+所以这里在锁内复制一份普通值：
+
+```text
+拿到 request 指针
+复制成 request 快照
+解锁
+编码复制出来的快照
+```
+
+这样响应编码就不再读共享对象。
+
+### `POST /api/step` 如何加锁
+
+```go
+s.mu.Lock()
+if err := s.System.Step(); err != nil {
+	s.mu.Unlock()
+	...
+}
+
+data, err := s.System.Snapshot()
+s.mu.Unlock()
+```
+
+手动 step 会修改 `System`，所以要加锁。
+
+手动 step 后立刻返回 state，这个 `Snapshot()` 也在同一把锁里完成，保证返回的是 step 后的一致状态。
+
+### 后台 goroutine 如何加锁
+
+`runner.go` 里：
+
+```go
+s.mu.Lock()
+if err := s.System.Step(); err != nil {
+	log.Printf("auto step failed: %v", err)
+}
+s.mu.Unlock()
+```
+
+后台自动 step 和 API 手动 step 使用同一把锁。
+
+所以同一时间不会出现：
+
+```text
+两个 Step 同时运行
+Step 和 AddRequest 同时运行
+Step 和 Snapshot 同时运行
+```
+
+这是当前最小并发版本的核心安全边界。
+
+### `main.go` 如何启动后台 step
+
+`cmd/server/main.go` 里新增：
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+server.StartAutoStep(ctx, defaultAutoStepInterval)
+```
+
+`context.Background()` 创建一个根 context。
+
+`context.WithCancel(...)` 返回：
+
+```text
+ctx
+  传给后台 goroutine，用于接收取消信号
+
+cancel
+  调用它就会关闭 ctx.Done()
+```
+
+当前 `main.go` 里用：
+
+```go
+defer cancel()
+```
+
+表示 main 退出时通知后台 goroutine 停止。
+
+自动 step 间隔配置为：
+
+```go
+defaultAutoStepInterval = 500 * time.Millisecond
+```
+
+也就是说，服务启动后，大约每 500ms 后台自动推进一次 `System.Step()`。
+
+### 这个版本带来的行为变化
+
+之前：
+
+```text
+POST /api/request
+  只创建请求
+
+POST /api/step
+  手动推进电梯
+```
+
+现在：
+
+```text
+POST /api/request
+  创建请求
+
+后台 goroutine
+  自动每 500ms 调用 Step
+```
+
+所以前端或 curl 提交请求后，即使不手动调用 `/api/step`，电梯也会随着后台 ticker 自动移动。
+
+`POST /api/step` 目前仍然保留，方便调试。
+
+### 这还不是最终并发模型
+
+课程要求里更理想的方向是：
+
+```text
+每部电梯作为独立执行单元
+```
+
+最终可能会设计成：
+
+```text
+每部电梯一个 goroutine
+调度器通过 channel 给电梯发送 StopPlan
+System 通过集中状态管理或事件循环汇总状态
+API 只读受保护的快照
+```
+
+但本轮还没有做这些。
+
+当前版本是：
+
+```text
+一个后台 goroutine 统一调用 Step
+System 仍然是中心化状态
+mutex 保护所有 API 和后台访问
+```
+
+这样做的目的不是最终形态，而是先把 Go 并发的最小可运行模型搭起来。
+
+### 当前状态边界
+
+本轮明确的边界：
+
+```text
+调度器仍然维护：
+  请求分配
+  Stops 插入
+  AssignedTick
+  AssignedElevatorID
+
+stepElevator 仍然维护：
+  单部电梯移动
+  门状态
+  到站完成请求
+
+API 层 mutex 维护：
+  谁可以在同一时刻访问 System
+
+后台 goroutine 负责：
+  定时调用 System.Step()
+```
+
+也就是说：
+
+```text
+业务逻辑仍在 elevator 包
+并发保护暂时在 api.Server 外围
+```
+
+### 为什么 mutex 放在 API 层
+
+这不是唯一设计。
+
+也可以把 mutex 放进 `System` 里面，让 `System` 自己保护自己。
+
+但当前先放在 `api.Server` 里，有两个原因：
+
+```text
+1. 对已有 elevator 包改动小
+2. 同步版本的 System 测试不用全部重写
+```
+
+当前约定是：
+
+```text
+只要通过 HTTP 服务运行，就由 Server.mu 保护 System
+```
+
+后续如果每部电梯都有自己的 goroutine，可能需要重新设计，把并发控制进一步下沉到 elevator 包或单线程事件循环里。
+
+### 新增测试
+
+`internal/api/handler_test.go` 新增：
+
+```go
+TestStartAutoStepAdvancesSystemTick
+```
+
+它会：
+
+```text
+1. 创建测试 Server
+2. 用很短的 interval 启动 StartAutoStep
+3. 等待 CurrentTick 变大
+4. 如果 200ms 内没有变化，就测试失败
+```
+
+这个测试证明：
+
+```text
+后台 goroutine 确实在推进 System.Step()
+```
+
+### race 检查
+
+普通测试：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+并发数据竞争检查：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+结果都通过。
+
+`go test -race` 会启用 Go 的 race detector。它可以发现常见的数据竞争，例如：
+
+```text
+一个 goroutine 在写变量
+另一个 goroutine 同时读同一个变量
+中间没有锁或其他同步机制
+```
+
+这一步对于并发代码很重要。普通 `go test` 通过，不代表没有数据竞争；`go test -race` 更适合检查这类问题。
