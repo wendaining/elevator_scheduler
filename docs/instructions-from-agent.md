@@ -214,13 +214,12 @@
 
 - [x] 重构 FCFS：从 `Requests` 中选择最早的 pending 请求
 - [x] 重构 Nearest：基于 pending 请求和电梯当前位置选择候选电梯
-- [ ] 重构 SCAN/LOOK：基于 `Stops`、`ScanDirection` 和请求方向追加或分配停靠计划
 - [x] 重构 `POST /api/request`：基于新的 `Request` 的设计创建请求
 - [x] 保持 API 错误处理清晰，例如非法楼层、非法方向、非法请求类型
-- [ ] 用 `curl` 验证新请求模型能从 API 进入系统
-- [ ] 跑通 `go test ./...`
-- [ ] 在 `docs/record.md` 记录新状态 JSON 的关键字段
-- [ ] 做一次小提交，例如 `feat: adapt api to request state model`
+- [x] 用 `curl` 验证新请求模型能从 API 进入系统
+- [x] 跑通 `go test ./...`
+- [x] 在 `docs/record.md` 记录新状态 JSON 的关键字段
+- [x] 做一次小提交，例如 `feat: adapt api to request state model`
 
 ## 7. 引入并发模型
 

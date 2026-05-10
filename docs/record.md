@@ -6673,3 +6673,455 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
 ```
 
 结果通过。
+
+## 2026-05-09：用 curl 验证新请求模型进入 API
+
+这一节先介绍 `curl` 的基础用法，再说明如何验证新的 `POST /api/request`。
+
+### curl 是什么
+
+`curl` 是一个命令行 HTTP 客户端。
+
+平时浏览器也会发 HTTP 请求，只是浏览器会把结果渲染成网页。`curl` 不渲染页面，它直接把 HTTP 响应打印到终端。
+
+所以它很适合调试后端 API：
+
+```text
+浏览器：适合看页面
+curl：适合直接看接口请求和响应
+```
+
+### 最基础用法：GET 请求
+
+最简单的命令是：
+
+```bash
+curl http://localhost:8080/api/health
+```
+
+如果不指定方法，`curl` 默认使用 `GET`。
+
+上面这条命令的意思是：
+
+```text
+向 http://localhost:8080/api/health 发送 GET 请求
+把响应体打印到终端
+```
+
+如果后端正在运行，应该能看到类似：
+
+```json
+{"status":"ok"}
+```
+
+### 查看响应头：`-i`
+
+有时不仅想看响应体，还想看 HTTP 状态码和响应头，可以加：
+
+```bash
+curl -i http://localhost:8080/api/health
+```
+
+`-i` 表示 include response headers。
+
+可能看到：
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+...
+
+{"status":"ok"}
+```
+
+其中：
+
+```text
+HTTP/1.1 200 OK
+  表示请求成功
+
+Content-Type
+  表示响应体是什么格式
+```
+
+### 指定 HTTP 方法：`-X`
+
+如果要发送 `POST`，可以用：
+
+```bash
+curl -X POST http://localhost:8080/api/step
+```
+
+`-X POST` 的意思是：
+
+```text
+这次请求使用 POST 方法
+```
+
+注意：很多时候只要用了 `-d`，`curl` 会自动使用 POST。但初学阶段建议显式写 `-X POST`，更容易看懂。
+
+### 发送 JSON：`-H` 和 `-d`
+
+`POST /api/request` 需要发送 JSON 请求体。
+
+完整命令：
+
+```bash
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":4,"direction":"up","kind":"hall"}'
+```
+
+逐个解释：
+
+```text
+curl
+  调用 curl 程序
+
+-i
+  显示响应头，方便看状态码
+
+-X POST
+  使用 POST 方法
+
+http://localhost:8080/api/request
+  请求地址
+
+-H "Content-Type: application/json"
+  添加请求头，告诉后端：我发送的是 JSON
+
+-d '{"floor":4,"direction":"up","kind":"hall"}'
+  请求体数据，也就是提交给后端的 JSON
+```
+
+这里的 JSON：
+
+```json
+{
+  "floor": 4,
+  "direction": "up",
+  "kind": "hall"
+}
+```
+
+正好对应当前 `POST /api/request` 的输入结构：
+
+```go
+type createRequestPayload struct {
+	Floor     int
+	Direction elevator.Direction
+	Kind      elevator.RequestKind
+}
+```
+
+### 第一步：启动后端
+
+先在一个终端启动后端：
+
+```bash
+go run ./cmd/server
+```
+
+如果启动成功，会看到类似：
+
+```text
+server listening on http://localhost:8080
+```
+
+这个终端要保持运行。
+
+然后打开另一个终端执行 `curl`。
+
+### 第二步：确认服务活着
+
+```bash
+curl -i http://localhost:8080/api/health
+```
+
+期望看到：
+
+```text
+HTTP/1.1 200 OK
+```
+
+以及响应体：
+
+```json
+{"status":"ok"}
+```
+
+这一步只验证服务器启动了。
+
+### 第三步：查看初始状态
+
+```bash
+curl -i http://localhost:8080/api/state
+```
+
+这会返回整个系统状态。
+
+重点看：
+
+```json
+"currentTick": 0,
+"requests": {}
+```
+
+`requests` 是空对象，说明当前没有活跃请求。
+
+### 第四步：提交一个 hall 请求
+
+发送 4 楼上行请求：
+
+```bash
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":4,"direction":"up","kind":"hall"}'
+```
+
+期望状态码：
+
+```text
+HTTP/1.1 201 Created
+```
+
+响应体大致是：
+
+```json
+{
+  "status": "accepted",
+  "currentTick": 0,
+  "request": {
+    "id": 1,
+    "floor": 4,
+    "direction": "up",
+    "kind": "hall",
+    "status": "pending",
+    "createdTick": 0,
+    "assignedTick": 0,
+    "completedTick": 0,
+    "assignedElevatorId": 0
+  }
+}
+```
+
+这说明：
+
+```text
+请求已经进入后端
+ID 是后端生成的
+状态是 pending
+CreatedTick 使用当前系统 tick
+```
+
+### 第五步：再次查看 state
+
+```bash
+curl -i http://localhost:8080/api/state
+```
+
+现在应该能在 `requests` 里看到刚才创建的请求。
+
+由于 `Requests` 现在是 Go 的 map，JSON 里看起来会像：
+
+```json
+"requests": {
+  "1": {
+    "id": 1,
+    "floor": 4,
+    "direction": "up",
+    "kind": "hall",
+    "status": "pending",
+    "createdTick": 0,
+    "assignedTick": 0,
+    "completedTick": 0,
+    "assignedElevatorId": 0
+  }
+}
+```
+
+注意：JSON 对象的 key 只能是字符串，所以 Go 的 `map[int64]*Request` 返回到 JSON 后，key 会显示成 `"1"`。
+
+这一步证明：
+
+```text
+POST /api/request 创建的新 Request 已经进入 System.Requests
+```
+
+### 第六步：推进一步模拟
+
+```bash
+curl -i -X POST http://localhost:8080/api/step
+```
+
+这会调用后端的 `System.Step()`。
+
+如果调度器分配了请求，再看：
+
+```bash
+curl -i http://localhost:8080/api/state
+```
+
+可能会看到请求状态从：
+
+```text
+pending
+```
+
+变成：
+
+```text
+assigned
+```
+
+并且：
+
+```json
+"assignedElevatorId": 1
+```
+
+这说明：
+
+```text
+请求不只是进入了 API
+还进入了调度系统
+并被分配给了某部电梯
+```
+
+### 第七步：多次 step，直到请求完成
+
+可以连续执行：
+
+```bash
+curl -X POST http://localhost:8080/api/step
+curl -X POST http://localhost:8080/api/step
+curl -X POST http://localhost:8080/api/step
+```
+
+然后再看：
+
+```bash
+curl http://localhost:8080/api/state
+```
+
+当电梯到达目标楼层并完成请求后，这个请求会从运行态 `requests` 中消失：
+
+```json
+"requests": {}
+```
+
+这是当前模型的预期行为：
+
+```text
+活跃请求保存在 System.Requests
+完成请求写入 SQLite
+完成后从 System.Requests 删除
+```
+
+### 验证错误处理：客户端不能提交 id/status
+
+当前 API 不允许客户端自己指定 `id` 或 `status`：
+
+```bash
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"id":99,"floor":4,"direction":"up","kind":"hall","status":"done"}'
+```
+
+期望看到：
+
+```text
+HTTP/1.1 400 Bad Request
+```
+
+原因是 handler 使用了：
+
+```go
+decoder.DisallowUnknownFields()
+```
+
+而 `createRequestPayload` 只允许：
+
+```text
+floor
+direction
+kind
+```
+
+### 验证错误处理：hall 请求不能 idle
+
+```bash
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":4,"direction":"idle","kind":"hall"}'
+```
+
+期望：
+
+```text
+HTTP/1.1 400 Bad Request
+```
+
+因为 hall 请求表示楼层外部按钮，必须是上行或下行。
+
+### 验证错误处理：cabin 请求必须 idle
+
+```bash
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":4,"direction":"up","kind":"cabin"}'
+```
+
+期望：
+
+```text
+HTTP/1.1 400 Bad Request
+```
+
+当前模型里 cabin 请求表示电梯内部选择目标楼层，不表达上行/下行按钮，所以 direction 使用 `idle`。
+
+正确的 cabin 请求是：
+
+```bash
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":4,"direction":"idle","kind":"cabin"}'
+```
+
+### 最小验证链路总结
+
+最小验证可以按这个顺序：
+
+```bash
+go run ./cmd/server
+```
+
+另一个终端：
+
+```bash
+curl -i http://localhost:8080/api/health
+
+curl -i http://localhost:8080/api/state
+
+curl -i -X POST http://localhost:8080/api/request \
+  -H "Content-Type: application/json" \
+  -d '{"floor":4,"direction":"up","kind":"hall"}'
+
+curl -i http://localhost:8080/api/state
+
+curl -i -X POST http://localhost:8080/api/step
+
+curl -i http://localhost:8080/api/state
+```
+
+如果能观察到：
+
+```text
+POST /api/request 返回 201
+返回的 request 有后端生成的 id/status/createdTick
+GET /api/state 里出现对应 request
+POST /api/step 后 request 被 assigned
+若干 step 后 request 从 active requests 消失
+```
+
+就说明新请求模型已经能从 API 进入系统，并参与调度和完成流程。
