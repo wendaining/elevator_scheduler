@@ -18,6 +18,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Runtime SQLite databases
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
 # Go build and test outputs
 bin/
 build/
