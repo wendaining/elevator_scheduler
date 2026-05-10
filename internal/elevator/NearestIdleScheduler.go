@@ -18,38 +18,11 @@ func (NearestIdleScheduler) Assign(s *System) bool {
 		return false
 	}
 
-	request := s.Requests[requestID] // 取最早的 pending request
-	bestIndex := -1                  // 目标电梯序号
-	bestDistance := 0                // 距离的最近值
-
-	for i, elevator := range s.Elevators { // 下标和对象同时遍历
-		if !canAcceptRequest(elevator) {
-			continue
-		}
-
-		distance := floorDistance(elevator.CurrentFloor, request.Floor)
-
-		if bestIndex == -1 || distance < bestDistance {
-			bestIndex = i
-			bestDistance = distance
-		}
-		if distance == bestDistance {
-			numTargetNow := len(s.Elevators[bestIndex].Stops)
-			numTargetCandidate := len(s.Elevators[i].Stops)
-			if numTargetNow >= numTargetCandidate {
-				if numTargetNow == numTargetCandidate {
-					bestIndex = min(i, bestIndex) // 目标数量相同时选择编号小的
-				} else {
-					bestIndex = i // 否则选择目标更少的
-				}
-			}
-		}
-	}
-
-	if bestIndex == -1 {
+	candidate, ok := BestIdleAssignmentCandidate(s, requestID)
+	if !ok {
 		return false
 	}
 
-	s.assignRequestToElevator(requestID, bestIndex)
+	s.assignRequestToElevator(candidate.RequestID, candidate.ElevatorIndex)
 	return true
 }

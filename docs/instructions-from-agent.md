@@ -190,13 +190,13 @@
 
 目标：先把高级调度需要的接口边界留好，但不急着完成最终 cost 公式。
 
-- [ ] 设计调度评分结构，例如 `AssignmentScore` 或 `AssignmentCandidate`
-- [ ] 预留 cost 计算接口，例如 `EstimateCost(system *System, elevator Elevator, request Request) int`
-- [ ] 让 SCAN/LOOK 调度器通过统一入口选择候选电梯
-- [ ] cost 函数先返回可解释的基础分数，但结构上要能加入等待时间补偿、掉头惩罚、已有停靠惩罚
-- [ ] 写测试验证调度器能基于 cost 选择候选电梯
-- [ ] 在 `docs/record.md` 记录：cost 函数当前预留了哪些维度，后续如何增强
-- [ ] 做一次小提交，例如 `feat: add scheduler cost interface`
+- [x] 设计调度评分结构，例如 `AssignmentScore` 或 `AssignmentCandidate`
+- [x] 预留 cost 计算接口，例如 `EstimateCost(system *System, elevator Elevator, request Request) int`
+- [x] 让至少一个调度器通过统一入口选择候选电梯；SCAN/LOOK 后续重写时复用该入口
+- [x] cost 函数先返回可解释的基础分数，但结构上要能加入等待时间补偿、掉头惩罚、已有停靠惩罚
+- [x] 写测试验证调度器能基于 cost 选择候选电梯
+- [x] 在 `docs/record.md` 记录：cost 函数当前预留了哪些维度，后续如何增强
+- [x] 做一次小提交，例如 `feat: add scheduler cost interface`
 
 ### 6.5.7 请求历史数据库持久化
 

@@ -7125,3 +7125,505 @@ POST /api/step 后 request 被 assigned
 ```
 
 就说明新请求模型已经能从 API 进入系统，并参与调度和完成流程。
+
+## 2026-05-10：SCAN / LOOK 是否必须实现 cost 函数
+
+先给结论：
+
+```text
+SCAN 和 LOOK 算法本身不一定需要 cost 函数。
+但在多电梯系统里，如果要决定“哪个电梯接这个请求”，cost 函数会很有用。
+```
+
+也就是说，`cost` 不是 SCAN / LOOK 的定义本身，而是多电梯调度时的一层评分机制。
+
+### SCAN / LOOK 本身是什么
+
+SCAN 和 LOOK 更像是在回答：
+
+```text
+一部电梯已经有了方向和停靠队列之后，它应该按什么顺序服务这些请求？
+```
+
+SCAN 的思想类似磁盘调度里的电梯算法：
+
+```text
+沿一个方向持续服务
+到边界或没有更多请求后再反向
+```
+
+LOOK 和 SCAN 很像，但它不一定真的走到最顶层或最底层，而是：
+
+```text
+只走到当前方向上最后一个需要服务的请求处
+然后反向
+```
+
+所以 SCAN / LOOK 的核心是：
+
+```text
+维护方向
+维护停靠计划
+顺路请求插入
+什么时候反向
+```
+
+这些可以不用 cost 函数，也能写出一个完整算法。
+
+### cost 函数解决的是什么问题
+
+cost 函数更像是在回答另一个问题：
+
+```text
+当前有一个 pending request，应该分给哪部电梯？
+```
+
+例如现在有 5 部电梯：
+
+```text
+1 号电梯：在 3 楼，上行，Stops=[6, 9]
+2 号电梯：在 10 楼，下行，Stops=[7]
+3 号电梯：在 1 楼，空闲
+4 号电梯：在 15 楼，上行，Stops=[18]
+5 号电梯：在 5 楼，空闲
+```
+
+新请求是：
+
+```text
+6 楼，上行 hall request
+```
+
+这时候 SCAN / LOOK 可以告诉我们：
+
+```text
+某部电梯如果接了这个请求，应该把这个 StopPlan 插到哪里
+```
+
+但还需要决定：
+
+```text
+到底哪部电梯最适合接？
+```
+
+这就是 cost 函数的价值。
+
+### cost 可以理解成“接这个请求的代价”
+
+可以把 cost 函数想成：
+
+```go
+EstimateCost(system, elevator, request) int
+```
+
+它给“某部电梯接某个请求”打一个分数。
+
+分数越低，说明越适合。
+
+cost 可以考虑很多因素：
+
+```text
+电梯当前楼层到请求楼层的距离
+请求是否顺路
+电梯是否需要掉头
+电梯当前已有多少停靠计划
+请求已经等待了多久
+电梯是否空闲
+```
+
+例如一个简单 cost 可以是：
+
+```text
+基础距离
++ 掉头惩罚
++ 已有 Stops 数量惩罚
+- 等待时间补偿
+```
+
+这不是 SCAN / LOOK 的核心规则，而是多电梯分配时的评分规则。
+
+### 没有 cost 函数也可以实现 SCAN / LOOK 吗
+
+可以。
+
+比如可以先写一个规则式 SCAN：
+
+```text
+1. 优先找能顺路接这个请求的电梯
+2. 如果有多部顺路电梯，选距离最近的
+3. 如果没有顺路电梯，找空闲电梯
+4. 如果有多部空闲电梯，选距离最近的
+5. 如果都不满足，暂时不分配
+```
+
+这个算法没有显式 `cost` 函数，但本质上仍然在做选择，只是规则写死在 if/else 里。
+
+问题是：随着规则增加，if/else 会越来越难读。
+
+### 有 cost 函数的好处
+
+cost 函数的好处是把“评分逻辑”集中起来。
+
+没有 cost 函数时，逻辑可能散落在：
+
+```text
+assignAlongTheWay()
+assignToIdleElevator()
+scanRequestPriority()
+各种 if/else
+```
+
+有 cost 函数后，可以更统一：
+
+```text
+枚举所有 elevator + request 候选组合
+对每个候选组合计算 cost
+选择 cost 最低的候选
+把请求插入对应电梯的 Stops
+```
+
+这样后续要改策略时，不一定要重写整个调度器，只需要调整 cost 公式。
+
+### 什么时候必须上 cost
+
+如果目标只是实现一个能解释的单电梯 SCAN / LOOK：
+
+```text
+不必须。
+```
+
+如果目标是多电梯、可比较、可扩展的调度系统：
+
+```text
+应该上。
+```
+
+因为多电梯调度不只是“电梯内部怎么排序”，还包括：
+
+```text
+请求分配给哪部电梯
+是否抢占 / 重分配
+等待太久的请求是否要补偿
+是否避免某些请求长期饥饿
+```
+
+这些都很适合通过 cost 或 score 表达。
+
+### 对当前项目的建议
+
+当前可以直接重写 SCAN，甚至删除旧的 `SCANScheduler.go` 后重新实现。
+
+但建议把问题拆成两层：
+
+```text
+第一层：LOOK / SCAN 的停靠顺序规则
+  负责方向、顺路插入、反向、Stops 排序
+
+第二层：多电梯候选评分
+  负责决定哪个电梯接哪个请求
+  这里可以使用 cost 函数
+```
+
+也就是说：
+
+```text
+LOOK / SCAN 不等于 cost
+cost 是帮助 LOOK / SCAN 在多电梯场景下做选择的工具
+```
+
+所以如果后面重写 SCAN / LOOK，可以这样设计：
+
+```text
+先定义候选：
+  elevator + request + 插入后的 StopPlan 位置
+
+再定义 cost：
+  这个候选会带来多少代价
+
+最后执行：
+  选择 cost 最低的候选并应用
+```
+
+### 一个比较清晰的实现方向
+
+可以先不要急着写复杂公式，但要预留结构：
+
+```go
+type AssignmentCandidate struct {
+	RequestID     int64
+	ElevatorIndex int
+	Cost          int
+}
+```
+
+然后调度器做：
+
+```text
+1. 枚举所有 pending request
+2. 枚举所有 elevator
+3. 判断这个 elevator 是否可以接这个 request
+4. 计算 cost
+5. 选 cost 最低者
+6. 插入 StopPlan
+```
+
+这样即使一开始 cost 很简单，例如：
+
+```text
+距离 + 掉头惩罚 + Stops 数量惩罚
+```
+
+后续也可以扩展：
+
+```text
+等待时间补偿
+长期饥饿避免
+不同算法对比
+负载人数惩罚
+```
+
+### 最终回答
+
+你的判断是合理的：当前 SCAN 可以重写，后面也可以加入 LOOK。
+
+对于问题“SCAN / LOOK 需不需要 cost 函数”，答案是：
+
+```text
+算法定义本身不需要。
+多电梯调度实现中很推荐需要。
+```
+
+如果只是写一个单电梯或规则式版本，可以不用 cost。
+
+如果要做课程里更有说服力的多电梯调度，那么 cost 函数应该作为候选分配层存在，而不是混在 SCAN / LOOK 的方向规则里。
+
+## 2026-05-10：实现调度 cost 函数骨架
+
+本阶段完成 `docs/instructions-from-agent.md` 的 6.5.6：先把多电梯候选评分层搭出来。
+
+这轮没有重写 `SCANScheduler.go`。原因是当前目标不是改 SCAN，而是先把 cost 函数作为独立能力建立起来。后续如果重写 SCAN 或新增 LOOK，可以复用这一层。
+
+### 新增文件
+
+新增：
+
+```text
+internal/elevator/cost.go
+internal/elevator/cost_test.go
+```
+
+`cost.go` 负责回答一个问题：
+
+```text
+如果把某个 request 分配给某部 elevator，这个候选方案有多合适？
+```
+
+### 新增 `AssignmentScore`
+
+```go
+type AssignmentScore struct {
+	DistanceCost     int
+	TurnPenalty      int
+	StopPenalty      int
+	WaitCompensation int
+	Total            int
+}
+```
+
+它不是只返回一个黑盒数字，而是把 cost 拆成几个部分：
+
+```text
+DistanceCost
+  电梯当前楼层到请求楼层的距离成本。
+
+TurnPenalty
+  如果电梯需要掉头，增加惩罚。
+
+StopPenalty
+  电梯已有 Stops 越多，说明它越忙，增加惩罚。
+
+WaitCompensation
+  请求等待越久，扣掉一部分成本，避免长期饥饿。
+
+Total
+  最终用于比较候选的总分。
+```
+
+当前公式是：
+
+```text
+Total = DistanceCost + TurnPenalty + StopPenalty - WaitCompensation
+```
+
+如果结果小于 0，会压到 0，避免出现负成本。
+
+### 新增 `AssignmentCandidate`
+
+```go
+type AssignmentCandidate struct {
+	RequestID     int64
+	ElevatorIndex int
+	Score         AssignmentScore
+}
+```
+
+一个 candidate 表示：
+
+```text
+把 RequestID 这个请求
+分配给 Elevators[ElevatorIndex] 这部电梯
+对应的评分是 Score
+```
+
+这一步很重要，因为调度器真正要比较的不是单独的 request，也不是单独的 elevator，而是：
+
+```text
+request + elevator 的组合
+```
+
+### `EstimateCost`
+
+```go
+func EstimateCost(system *System, elevator Elevator, request Request) int
+```
+
+这是 6.5.6 里预留的简单入口。
+
+它内部调用：
+
+```go
+EstimateAssignmentScore(system, elevator, request).Total
+```
+
+如果只关心最终分数，用 `EstimateCost`。
+
+如果想看评分细节，用：
+
+```go
+EstimateAssignmentScore(...)
+```
+
+### 当前 cost 维度
+
+当前已经实现的维度：
+
+```text
+距离
+  floorDistance(elevator.CurrentFloor, request.Floor) * system.TicksPerFloor
+
+掉头惩罚
+  电梯当前 Direction 不是 idle，并且请求楼层不在当前方向上，就增加 turnPenaltyCost
+
+已有停靠惩罚
+  len(elevator.Stops) * stopPenaltyCost
+
+等待时间补偿
+  system.CurrentTick - request.CreatedTick
+```
+
+其中常量暂时是：
+
+```go
+turnPenaltyCost = 20
+stopPenaltyCost = 10
+```
+
+这两个值不是最终调优结果，只是先让公式有清楚的结构。
+
+### 为什么先让 `nearest-idle` 使用 cost
+
+这轮没有大改 SCAN。
+
+为了让 cost 层不是“写了但没人用”，把 `NearestIdleScheduler` 改成调用：
+
+```go
+BestIdleAssignmentCandidate(s, requestID)
+```
+
+也就是说，`nearest-idle` 现在不再手写一套距离比较逻辑，而是：
+
+```text
+1. 取最早 pending request
+2. 枚举所有空闲电梯
+3. 为每个候选计算 AssignmentScore
+4. 选择 Total 最低的 candidate
+5. 调用 assignRequestToElevator
+```
+
+这样 cost 函数已经进入真实调度路径。
+
+### 为什么暂时只选空闲电梯
+
+`BestIdleAssignmentCandidate` 当前只考虑：
+
+```go
+canAcceptRequest(elevator)
+```
+
+也就是：
+
+```text
+未紧急停止
+没有 Stops
+```
+
+这是为了和 `nearest-idle` 的算法语义保持一致。
+
+后续 LOOK / SCAN 要做的是另一类候选：
+
+```text
+运行中的电梯顺路追加请求
+把 StopPlan 插入某个位置
+计算插入后对总路线的影响
+```
+
+这比空闲电梯候选复杂，所以本轮先不混进去。
+
+### 测试覆盖
+
+新增测试覆盖：
+
+```text
+EstimateAssignmentScore 会返回距离、掉头、Stops、等待补偿明细
+请求在反方向时会产生掉头惩罚
+BestIdleAssignmentCandidate 会选择 cost 最低的空闲电梯
+NearestIdleScheduler 会通过 cost 候选选择电梯
+```
+
+测试文件：
+
+```text
+internal/elevator/cost_test.go
+```
+
+### 后续如何增强
+
+现在 cost 函数只是骨架，但结构已经能继续加维度：
+
+```text
+更精确估算已有 Stops 的等待时间
+顺路插入请求的增量成本
+LOOK / SCAN 的方向优先级
+请求等待时间补偿的权重
+避免某个请求长期 pending 的饥饿保护
+电梯负载人数惩罚
+```
+
+后续如果重写 SCAN / LOOK，不应该把所有判断写成散落的 if/else，而应该尽量走：
+
+```text
+生成候选
+计算 cost
+选择最优候选
+应用 StopPlan
+```
+
+### 本次验证
+
+已运行：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+结果通过。
