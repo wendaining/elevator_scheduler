@@ -21,6 +21,8 @@ func NewScheduler(name string) (Scheduler, error) {
 		return NearestIdleScheduler{}, nil
 	case "fcfs":
 		return FCFSScheduler{}, nil
+	case "scan":
+		return SCANScheduler{}, nil
 	default:
 		return nil, fmt.Errorf("unknown scheduler %q", name)
 	}

@@ -3188,3 +3188,84 @@ go test ./...
 ```
 
 全部 20 个测试通过。
+
+## 2026-05-12：实现 SCAN 调度算法
+
+这次根据 `docs/instructions-from-agent.md` 第 10 部分，在：
+
+```text
+internal/elevator/SCANScheduler.go
+```
+
+实现 SCAN 调度算法。
+
+### 当前 SCAN 的调度顺序
+
+`Assign` 的入口逻辑是：
+
+```text
+1. 如果没有 pending 请求，直接返回 false
+2. 优先尝试把请求追加给顺路运行中的电梯
+3. 如果没有顺路电梯，再找最近的空闲电梯
+```
+
+顺路电梯需要满足：
+
+```text
+电梯没有 EmergencyStop
+电梯已经有 Stops，也就是正在服务某个方向
+请求楼层在电梯当前 ScanDirection 的前方
+hall 请求方向和 ScanDirection 一致
+cabin 请求只要求楼层在前方
+```
+
+### 停靠计划排序
+
+SCAN 的停靠计划按扫描方向排序：
+
+```text
+ScanDirection = up
+  Stops 按楼层升序
+
+ScanDirection = down
+  Stops 按楼层降序
+```
+
+这样电梯会沿一个方向持续服务前方请求，而不是每次加入新请求后乱序掉头。
+
+### 空闲电梯如何接单
+
+如果没有正在顺路的电梯，调度器会在空闲电梯中选择候选：
+
+```text
+优先选择符合当前 ScanDirection 的请求
+如果没有，就允许反向接单
+同优先级下选距离最近的电梯
+```
+
+当空闲电梯接到反方向请求时，会调整自己的 `ScanDirection`。
+
+### 测试覆盖
+
+新增：
+
+```text
+internal/elevator/SCANScheduler_test.go
+```
+
+覆盖：
+
+```text
+运行中上行电梯可以追加顺路上行请求
+没有顺路电梯时选择最近空闲电梯
+下行扫描时 Stops 按楼层降序排列
+```
+
+验证命令：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+两者均已通过。
