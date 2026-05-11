@@ -239,7 +239,7 @@
 - [x] 明确哪些状态由调度器维护，哪些状态由电梯维护
 - [x] 学习并运行 `go test -race` 或类似方式检查数据竞争
 - [x] 在 `docs/record2.md` 记录：并发版本相比同步版本改变了什么
-- [ ] 做一次小提交，例如 `feat: run elevators concurrently`
+- [x] 做一次小提交，例如 `feat: run elevators concurrently`
 
 完成本阶段后，再回到 API 层，为调度算法切换提供 HTTP 路由。
 
@@ -247,13 +247,12 @@
 
 目标：在 `internal/api` 包中增加切换调度算法的接口，但前提是 `internal/elevator` 中已经有可切换的算法实现。
 
-- [ ] 设计切换调度算法的 API，例如 `POST /api/scheduler`
-- [ ] 请求体包含算法名称，例如 `{ "name": "nearest-idle" }`
-- [ ] handler 调用 `System.SetScheduler(name)`
-- [ ] 非法算法名称返回清晰的 `400 Bad Request`
-- [ ] `GET /api/state` 继续返回当前 `schedulerName`
-- [ ] 用 `curl` 验证调度算法可以切换
-- [ ] 在 `docs/record.md` 记录 API 设计、请求示例和响应示例
+- [x] 设计切换调度算法的 API，例如 `POST /api/scheduler`
+- [x] 请求体包含算法名称，例如 `{ "name": "nearest-idle" }`
+- [x] handler 调用 `System.SetScheduler(name)`
+- [x] 非法算法名称返回清晰的 `400 Bad Request`
+- [x] `GET /api/state` 继续返回当前 `schedulerName`
+- [x] 用 `curl` 验证调度算法可以切换
 
 ## 8. 补充测试和调试能力
 

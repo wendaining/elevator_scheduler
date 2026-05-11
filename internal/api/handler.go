@@ -27,6 +27,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/request", s.handleRequest)
+	mux.HandleFunc("/api/scheduler", s.handleScheduler)
 	mux.Handle("/", http.FileServer(http.Dir("web")))
 }
 
@@ -97,6 +98,34 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// 切换调度算法的 API
+func (s *Server) handleScheduler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	type SchedulerPayload struct {
+		Name string `json:"name"`
+	}
+	var schedulerPayload SchedulerPayload
+	if err := decodeJSONBody(r, &schedulerPayload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.System.SetScheduler(schedulerPayload.Name); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	response := map[string]any{
+		"status": "scheduler switched",
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
+
 }
 
 // createRequestPayload 是 POST /api/request 接收的请求体。
