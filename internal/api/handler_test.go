@@ -125,6 +125,58 @@ func TestHandleRequestRejectsInvalidJSON(t *testing.T) {
 	assertTextError(t, response.Body.String())
 }
 
+func TestHandleRequestRejectsInvalidFloor(t *testing.T) {
+	server := newTestServer(t)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/request",
+		strings.NewReader(`{"floor":21,"direction":"up","kind":"hall"}`),
+	)
+
+	server.handleRequest(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	assertTextError(t, response.Body.String())
+}
+
+func TestHandleRequestAcceptsBoundaryFloors(t *testing.T) {
+	server := newTestServer(t)
+
+	bodies := []string{
+		`{"floor":1,"direction":"up","kind":"hall"}`,
+		`{"floor":20,"direction":"down","kind":"hall"}`,
+	}
+
+	for _, body := range bodies {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/request", strings.NewReader(body))
+
+		server.handleRequest(response, request)
+
+		if response.Code != http.StatusCreated {
+			t.Fatalf("status code = %d, want %d; body = %s", response.Code, http.StatusCreated, response.Body.String())
+		}
+	}
+}
+
+func TestHandleRequestAllowsDuplicateRequestsWithDifferentIDs(t *testing.T) {
+	server := newTestServer(t)
+
+	first := createRequestForTest(t, server, `{"floor":4,"direction":"up","kind":"hall"}`)
+	second := createRequestForTest(t, server, `{"floor":4,"direction":"up","kind":"hall"}`)
+
+	if first.ID == second.ID {
+		t.Fatalf("duplicate requests received same ID %d", first.ID)
+	}
+	if len(server.System.Requests) != 2 {
+		t.Fatalf("active request count = %d, want 2", len(server.System.Requests))
+	}
+}
+
 func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 	server := newTestServer(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -159,6 +211,44 @@ func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 	}
 }
 
+func TestHandleSchedulerSwitchesScheduler(t *testing.T) {
+	server := newTestServer(t)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/scheduler",
+		strings.NewReader(`{"name":"nearest-idle"}`),
+	)
+
+	server.handleScheduler(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if server.System.SchedulerName != "nearest-idle" {
+		t.Fatalf("scheduler name = %q, want nearest-idle", server.System.SchedulerName)
+	}
+}
+
+func TestHandleSchedulerRejectsUnknownScheduler(t *testing.T) {
+	server := newTestServer(t)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/scheduler",
+		strings.NewReader(`{"name":"unknown"}`),
+	)
+
+	server.handleScheduler(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	assertTextError(t, response.Body.String())
+}
+
 func TestRegisterRoutesDoesNotExposeManualStep(t *testing.T) {
 	server := newTestServer(t)
 	mux := http.NewServeMux()
@@ -172,6 +262,26 @@ func TestRegisterRoutesDoesNotExposeManualStep(t *testing.T) {
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status code = %d, want %d", response.Code, http.StatusNotFound)
 	}
+}
+
+func createRequestForTest(t *testing.T, server *Server, body string) elevator.Request {
+	t.Helper()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/request", strings.NewReader(body))
+
+	server.handleRequest(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status code = %d, want %d; body = %s", response.Code, http.StatusCreated, response.Body.String())
+	}
+
+	var decoded struct {
+		Request elevator.Request `json:"request"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("Decode response returned error: %v", err)
+	}
+	return decoded.Request
 }
 
 func newTestServer(t *testing.T) *Server {

@@ -120,6 +120,7 @@ func assignSCANRequest(s *System, elevator *Elevator, requestID int64) {
 	request.AssignedElevatorID = elevator.ID
 
 	insertStopPlan(elevator, stopPlanFromRequest(*request))
+	logRequestAssigned(s, *request, elevator.ID)
 }
 
 func canTakeRequestInSCAN(e Elevator, request Request) bool {

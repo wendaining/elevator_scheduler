@@ -102,6 +102,14 @@ func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKi
 	}
 	s.Requests[request.ID] = &request
 	s.nextRequestID++
+	log.Printf(
+		"request created: id=%d floor=%d direction=%s kind=%s tick=%d",
+		request.ID,
+		request.Floor,
+		request.Direction,
+		request.Kind,
+		request.CreatedTick,
+	)
 	return s.Requests[request.ID], nil
 }
 
@@ -170,9 +178,7 @@ func (s *System) stepWithElevatorRunners() error {
 	}
 
 	assigned := s.scheduler.Assign(s)
-	if assigned {
-		log.Println("assigned one request")
-	}
+	_ = assigned
 	// 深拷贝的写法，把后者切片展开然后拷贝进一个空切片
 	commands := append([]chan elevatorTickCommand(nil), s.elevatorCommands...)
 	doneSignal := s.elevatorRunnersDone
@@ -260,6 +266,7 @@ func (s *System) assignRequestToElevator(requestID int64, elevatorIndex int) {
 	request.AssignedElevatorID = elevator.ID
 
 	addStopPlan(elevator, stopPlanFromRequest(*request))
+	logRequestAssigned(s, *request, elevator.ID)
 }
 
 // completeRequest 将指定 ID 的请求标记为完成，写入 SQLite，
@@ -277,6 +284,30 @@ func (s *System) completeRequest(requestID int64, completedTick int) error {
 		return err
 	}
 
+	log.Printf(
+		"request completed: id=%d elevator=%d floor=%d direction=%s kind=%s createdTick=%d assignedTick=%d completedTick=%d",
+		req.ID,
+		req.AssignedElevatorID,
+		req.Floor,
+		req.Direction,
+		req.Kind,
+		req.CreatedTick,
+		req.AssignedTick,
+		req.CompletedTick,
+	)
 	delete(s.Requests, requestID)
 	return nil
+}
+
+func logRequestAssigned(s *System, request Request, elevatorID int) {
+	log.Printf(
+		"request assigned: id=%d elevator=%d floor=%d direction=%s kind=%s scheduler=%s tick=%d",
+		request.ID,
+		elevatorID,
+		request.Floor,
+		request.Direction,
+		request.Kind,
+		s.SchedulerName,
+		s.CurrentTick,
+	)
 }

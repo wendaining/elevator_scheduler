@@ -2972,6 +2972,154 @@ system.StartElevatorRunners(ctx)
 
 测试辅助函数 `startElevatorRunnersForTest` 用来减少重复代码。
 
+## 2026-05-11：补充第 8 阶段测试
+
+这次完成 `docs/instructions-from-agent.md` 第 8 部分里除 git 提交外的测试任务。
+
+新增测试主要覆盖三类风险。
+
+### 核心调度逻辑测试
+
+新增文件：
+
+```text
+internal/elevator/scheduler_test.go
+```
+
+覆盖内容：
+
+```text
+FCFS 会选择 ID 最小的 pending 请求，而不是依赖 map 遍历顺序
+FCFS 会跳过已有 Stops 的忙碌电梯和 EmergencyStop 电梯
+FirstAvailable 在 1 号电梯忙碌时不会错误分配给其他电梯
+同楼层、同方向的重复请求可以合并进同一个 StopPlan，但保留不同 Request ID
+```
+
+这里的重点是验证调度器对“请求顺序”“电梯可接单状态”“重复请求”的处理。
+
+### 核心模型边界测试
+
+在：
+
+```text
+internal/elevator/system_test.go
+```
+
+补充：
+
+```text
+非法楼层 0、21 会被 AddRequest 拒绝
+边界楼层 1、20 可以创建请求
+```
+
+这些测试保证后端核心模型自身有边界检查，而不是只依赖 API handler。
+
+### API handler 测试
+
+在：
+
+```text
+internal/api/handler_test.go
+```
+
+补充：
+
+```text
+POST /api/request 拒绝非法楼层
+POST /api/request 接受边界楼层
+重复 POST /api/request 会创建不同 ID 的请求
+POST /api/scheduler 可以切换合法调度算法
+POST /api/scheduler 会拒绝未知算法
+```
+
+现在第 8 阶段的“API handler 写基础测试”不再只依赖 curl 示例，而是有可自动运行的 Go 测试。
+
+### 验证命令
+
+普通测试：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+并发数据竞争检查：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+两者均已通过。
+
+## 2026-05-11：补充最小运行日志
+
+这次使用 Go 标准库 `log.Printf` 补充最小运行日志，不引入第三方日志库。
+
+日志覆盖四类事件：
+
+```text
+request created
+  请求进入系统。
+
+request assigned
+  请求被调度器分配给某部电梯。
+
+request completed
+  请求完成，写入 SQLite，并从运行态 Requests 删除。
+
+auto step failed
+  后台自动 Step 出错。
+```
+
+其中 `auto step failed` 已经存在于：
+
+```text
+internal/api/runner.go
+```
+
+本次新增的位置是：
+
+```text
+internal/elevator/system.go
+  addRequestLocked       记录 request created
+  assignRequestToElevator 记录普通调度器的 request assigned
+  completeRequest        记录 request completed
+
+internal/elevator/SCANScheduler.go
+  assignSCANRequest      记录 SCAN 调度器的 request assigned
+```
+
+目前没有记录每一个电梯移动 tick。
+
+原因是移动日志会非常密集，尤其当前后端会持续自动 Step。先记录请求生命周期和错误日志，能覆盖大多数调试需求；如果后续要调试电梯运动细节，再单独增加移动日志或调试开关。
+
+示例日志形态：
+
+```text
+request created: id=1 floor=8 direction=up kind=hall tick=12
+request assigned: id=1 elevator=2 floor=8 direction=up kind=hall scheduler=nearest-idle tick=13
+request completed: id=1 elevator=2 floor=8 direction=up kind=hall createdTick=12 assignedTick=13 completedTick=17
+auto step failed: elevator runners are not started
+```
+
+这些日志和 SQLite 的职责不同：
+
+```text
+SQLite completed_requests
+  保存已经完成的请求历史，适合统计和报告。
+
+log.Printf
+  显示运行过程中的关键事件，适合开发调试。
+```
+
+本次验证：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+两者均已通过。
+
 ## 2026-05-11：去掉两处代码冗余
 
 本阶段清理了两处真正的冗余——不是并发模型的复杂度，而是实现了相同功能但代码绕弯的写法。

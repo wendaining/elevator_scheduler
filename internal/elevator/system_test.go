@@ -184,6 +184,59 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 	}
 }
 
+func TestAddRequestRejectsInvalidFloors(t *testing.T) {
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+	defer system.Close()
+
+	invalidFloors := []int{0, 21}
+	for _, floor := range invalidFloors {
+		if _, err := system.AddRequest(floor, DirectionUp, RequestKindHall); err == nil {
+			t.Fatalf("AddRequest floor %d returned nil error, want error", floor)
+		}
+	}
+}
+
+func TestAddRequestAcceptsBoundaryFloors(t *testing.T) {
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+	defer system.Close()
+
+	firstFloorRequest, err := system.AddRequest(1, DirectionUp, RequestKindHall)
+	if err != nil {
+		t.Fatalf("AddRequest first floor returned error: %v", err)
+	}
+	topFloorRequest, err := system.AddRequest(20, DirectionDown, RequestKindHall)
+	if err != nil {
+		t.Fatalf("AddRequest top floor returned error: %v", err)
+	}
+
+	if firstFloorRequest.Floor != 1 {
+		t.Fatalf("first request floor = %d, want 1", firstFloorRequest.Floor)
+	}
+	if topFloorRequest.Floor != 20 {
+		t.Fatalf("top request floor = %d, want 20", topFloorRequest.Floor)
+	}
+}
+
 func TestNewSystemStoresTimingParameters(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
 		Floors:           12,
