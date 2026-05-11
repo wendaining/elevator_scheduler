@@ -2260,3 +2260,434 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
 ```
 
 结果都通过。
+
+## 2026-05-11：为每部电梯启动运行 goroutine
+
+这次完成第 7 阶段并发路线的第三步：
+
+```text
+设计每部电梯的运行循环，并逐步给每部电梯分配 goroutine
+```
+
+注意：这仍然是一个增量版本，不是最终的“完全分布式电梯系统”。
+
+当前实现的目标是：
+
+```text
+每部电梯都有自己的 goroutine
+每部电梯 goroutine 通过 channel 接收 tick 控制信号
+System.Step() 负责先运行调度器，再通知每部电梯执行一个 tick
+System 仍然用 mutex 保护共享状态
+```
+
+### 新增 `internal/elevator/elevator_runner.go`
+
+新增文件：
+
+```text
+internal/elevator/elevator_runner.go
+```
+
+这个文件负责和“每部电梯 goroutine”有关的逻辑。
+
+核心结构：
+
+```go
+type elevatorTickCommand struct {
+	done chan error
+}
+```
+
+它表示发给某一部电梯的一次 tick 命令。
+
+`done` 的作用和前面 API runner 里的 `stepCommand.done` 类似：
+
+```text
+System.Step() 发送 tick 命令
+电梯 goroutine 收到命令
+电梯 goroutine 推进自己对应的电梯
+电梯 goroutine 把 error 或 nil 发回 done
+System.Step() 等所有 done 返回后，再进入下一个 tick
+```
+
+### `System` 新增字段
+
+`System` 里新增：
+
+```go
+elevatorCommands       []chan elevatorTickCommand
+elevatorRunnersStarted bool
+```
+
+含义：
+
+```text
+elevatorCommands
+  每部电梯一个 channel。
+  elevatorCommands[i] 用来给第 i 部电梯发送 tick 命令。
+
+elevatorRunnersStarted
+  标记每部电梯的 goroutine 是否已经启动。
+```
+
+这些字段没有 JSON tag，也不是导出字段。
+
+它们属于并发运行时内部实现，不应该出现在 `/api/state` 里。
+
+此外，`System` 里现在有两把锁：
+
+```go
+mu     sync.Mutex
+stepMu sync.Mutex
+```
+
+它们分工不同：
+
+```text
+mu
+  保护 System 里的共享状态，例如 Elevators、Requests、CurrentTick。
+
+stepMu
+  保护一次完整的 System.Step() 调用。
+```
+
+为什么还需要 `stepMu`？
+
+因为在电梯 goroutine 版本里，`Step()` 会：
+
+```text
+1. 调度器分配请求
+2. 解锁
+3. 给每部电梯 goroutine 发送 tick 命令
+4. 等待所有电梯返回 done
+5. 再给 CurrentTick +1
+```
+
+中间不能一直持有 `mu`，否则电梯 goroutine 没法拿到锁更新自己的状态。
+
+但如果没有 `stepMu`，两个外部 goroutine 可能同时调用 `Step()`，导致两个全局 tick 交错执行。
+
+所以 `stepMu` 保证：
+
+```text
+一次完整 Step 结束之后，下一次 Step 才能开始。
+```
+
+`mu` 保护状态，`stepMu` 保护 tick 边界。
+
+### `StartElevatorRunners`
+
+新增公开方法：
+
+```go
+func (s *System) StartElevatorRunners(ctx context.Context)
+```
+
+它的流程是：
+
+```text
+1. 给 System 加锁
+2. 如果已经启动过，直接返回
+3. 为每部电梯创建一个 channel
+4. 保存到 s.elevatorCommands
+5. 标记 elevatorRunnersStarted = true
+6. 解锁
+7. 为每部电梯启动一个 goroutine
+```
+
+代码结构大致是：
+
+```go
+commands := make([]chan elevatorTickCommand, len(s.Elevators))
+for i := range commands {
+	commands[i] = make(chan elevatorTickCommand)
+}
+s.elevatorCommands = commands
+s.elevatorRunnersStarted = true
+```
+
+然后：
+
+```go
+for elevatorIndex, commandChannel := range commands {
+	go s.runElevator(ctx, elevatorIndex, commandChannel)
+}
+```
+
+这里的：
+
+```go
+go s.runElevator(...)
+```
+
+就是给每部电梯启动独立 goroutine。
+
+### 单部电梯的运行循环
+
+每个电梯 goroutine 执行：
+
+```go
+func (s *System) runElevator(ctx context.Context, elevatorIndex int, commands <-chan elevatorTickCommand) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case command := <-commands:
+			command.done <- s.stepElevatorByIndex(elevatorIndex)
+		}
+	}
+}
+```
+
+它一直等待两类事件：
+
+```text
+ctx.Done()
+  系统要求退出，goroutine 结束。
+
+commands
+  收到一次 tick 命令，推进自己负责的电梯。
+```
+
+这里每个 goroutine 都带着自己的：
+
+```go
+elevatorIndex
+```
+
+所以第 0 个 goroutine 只负责：
+
+```text
+Elevators[0]
+```
+
+第 1 个 goroutine 只负责：
+
+```text
+Elevators[1]
+```
+
+以此类推。
+
+### `stepElevatorByIndex`
+
+```go
+func (s *System) stepElevatorByIndex(elevatorIndex int) error
+```
+
+这个函数会：
+
+```text
+1. 给 System 加锁
+2. 检查 elevatorIndex 是否合法
+3. 调用已有的 stepElevator(s, &s.Elevators[elevatorIndex])
+4. 解锁
+```
+
+也就是说，单部电梯 goroutine 并不直接绕过锁修改共享状态。
+
+它仍然通过 `System` 的 mutex 保护：
+
+```go
+s.mu.Lock()
+defer s.mu.Unlock()
+```
+
+这保证了 `go test -race` 不会发现数据竞争。
+
+### `System.Step()` 的变化
+
+之前 `Step()` 永远走同步逻辑：
+
+```text
+调度器分配请求
+for 循环推进所有电梯
+CurrentTick++
+```
+
+现在 `Step()` 会先判断：
+
+```go
+if s.elevatorRunnersStarted {
+	return s.stepWithElevatorRunners()
+}
+```
+
+如果没有启动电梯 goroutine，就保留旧同步逻辑：
+
+```go
+return s.stepLocked()
+```
+
+这样测试和旧代码不会被迫全部改掉。
+
+### `stepWithElevatorRunners`
+
+这是新并发路径。
+
+流程是：
+
+```text
+1. System 加锁
+2. 检查电梯和调度器是否合法
+3. 调度器 Assign
+4. 拷贝 elevatorCommands
+5. 解锁
+6. 给每个电梯 channel 发送 tick 命令
+7. 等待每个电梯 goroutine 返回 done
+8. 全部完成后，CurrentTick++
+```
+
+为什么调度器仍然在 `System` 锁里运行？
+
+因为调度器会读写：
+
+```text
+Requests
+Elevators
+Stops
+AssignedTick
+AssignedElevatorID
+```
+
+这些都是共享状态。
+
+所以当前仍然让调度器在锁内运行。
+
+为什么推进每部电梯时不在 `Step()` 里直接 for 循环？
+
+因为现在要让每部电梯拥有自己的 goroutine：
+
+```text
+Step 发送命令
+电梯 goroutine 执行
+Step 等待结果
+```
+
+这就是从“一个函数循环所有电梯”到“每部电梯独立执行单元”的第一步。
+
+### 为什么仍然保留 mutex
+
+虽然现在每部电梯有自己的 goroutine，但 `Elevators` 仍然存放在同一个 `System` 结构里：
+
+```go
+Elevators []Elevator
+```
+
+所以它仍然是共享状态。
+
+如果每个电梯 goroutine 直接同时写：
+
+```go
+s.Elevators[i]
+```
+
+而 API 同时读取 `/api/state`，就会有数据竞争。
+
+所以当前版本仍然使用：
+
+```go
+s.mu
+```
+
+这意味着：
+
+```text
+每部电梯有独立 goroutine
+但真正写 System 状态时仍然串行化
+```
+
+这不是最高并发性能，但结构清楚，适合当前阶段。
+
+### `main.go` 的变化
+
+服务启动时现在会先启动电梯 goroutine：
+
+```go
+system.StartElevatorRunners(ctx)
+server.StartAutoStep(ctx, defaultAutoStepInterval)
+```
+
+顺序是：
+
+```text
+先启动每部电梯的 goroutine
+再启动自动 step runner
+```
+
+这样后台自动 step 触发时，`System.Step()` 已经可以把 tick 命令发送给每部电梯。
+
+### 新增测试
+
+新增测试：
+
+```go
+TestStepWithElevatorRunnersAdvancesEachElevator
+```
+
+测试做了这些事：
+
+```text
+1. 创建 2 部电梯
+2. 启动 StartElevatorRunners
+3. 手动给两部电梯设置 Stops
+4. 调用 System.Step()
+5. 验证两部电梯都推进了一个行动 tick
+6. 验证 CurrentTick 只增加 1
+```
+
+这个测试证明：
+
+```text
+Step 会向每部电梯 goroutine 发送 tick 命令
+每部电梯 goroutine 会推进自己负责的电梯
+整个系统仍然保持一个全局 tick
+```
+
+### 当前还不是最终设计
+
+当前实现仍然有几个限制：
+
+```text
+调度器仍然集中运行
+Stops 仍然由 System 统一保存
+电梯 goroutine 没有长期持有自己的本地状态
+乘梯请求还没有通过 request channel 进入调度器
+电梯之间的状态更新仍然靠 System mutex 串行化
+```
+
+最终如果要更接近真实并发模型，可以继续演进：
+
+```text
+API -> request channel -> scheduler goroutine
+scheduler -> elevator command channel -> elevator goroutine
+elevator goroutine -> state update channel -> System snapshot
+```
+
+但这会带来更复杂的状态所有权问题。
+
+当前版本先满足：
+
+```text
+每部电梯作为独立 goroutine 存在
+通过 channel 接收控制信号
+共享状态由 mutex 保护
+测试和 race 检查通过
+```
+
+### 本次验证
+
+普通测试：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+race 检查：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+结果都通过。
+

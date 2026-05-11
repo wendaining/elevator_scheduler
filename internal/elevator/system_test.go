@@ -1,6 +1,7 @@
 package elevator
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -257,6 +258,46 @@ func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 	}
 	if nextRequest.ID != request.ID+1 {
 		t.Fatalf("next request ID = %d, want %d", nextRequest.ID, request.ID+1)
+	}
+}
+
+func TestStepWithElevatorRunnersAdvancesEachElevator(t *testing.T) {
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    2,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+	defer system.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	system.StartElevatorRunners(ctx)
+
+	system.Elevators[0].Stops = []StopPlan{
+		{Floor: 2, Reason: StopReasonCabin, Direction: DirectionIdle},
+	}
+	system.Elevators[1].Stops = []StopPlan{
+		{Floor: 3, Reason: StopReasonCabin, Direction: DirectionIdle},
+	}
+
+	if err := system.Step(); err != nil {
+		t.Fatalf("Step returned error: %v", err)
+	}
+
+	if system.Elevators[0].CurrentFloor != 2 {
+		t.Fatalf("first elevator floor = %d, want 2", system.Elevators[0].CurrentFloor)
+	}
+	if system.Elevators[1].CurrentFloor != 2 {
+		t.Fatalf("second elevator floor = %d, want 2", system.Elevators[1].CurrentFloor)
+	}
+	if system.CurrentTick != 1 {
+		t.Fatalf("current tick = %d, want 1", system.CurrentTick)
 	}
 }
 

@@ -105,7 +105,8 @@ type Elevator struct {
 //
 // 在第一版模型中，此结构体仅描述状态。它尚未包含 goroutine、channel 或调度算法。
 type System struct {
-	mu sync.Mutex
+	mu     sync.Mutex
+	stepMu sync.Mutex
 
 	FloorCount int `json:"floorCount"`
 
@@ -135,6 +136,9 @@ type System struct {
 	// requestStore 负责把已完成请求写入 SQLite。
 	// 字段名小写且 json:"-"，表示它属于后端内部实现，不出现在 API 状态里。
 	requestStore *RequestStore `json:"-"`
+
+	elevatorCommands       []chan elevatorTickCommand
+	elevatorRunnersStarted bool
 
 	nextRequestID int64
 }

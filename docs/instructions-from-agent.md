@@ -231,7 +231,7 @@
 
 - [x] 第一步：把 mutex 从 API 层下沉到 `System` 层，由 `System` 自己保护内部共享状态
 - [x] 第二步：使用 channel 传递请求或控制信号
-- [ ] 第三步：设计每部电梯的运行循环，并逐步给每部电梯分配 goroutine
+- [x] 第三步：设计每部电梯的运行循环，并逐步给每部电梯分配 goroutine
 
 
 - [x] 在 tick、Requests、Stops、基础调度器都稳定后，再开始加入 goroutine

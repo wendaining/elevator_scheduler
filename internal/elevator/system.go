@@ -156,9 +156,16 @@ func (s *System) Snapshot() ([]byte, error) {
 // 1. 调度器尝试分配请求。调度是即时决策，不额外消耗 tick。
 // 2. 每部电梯执行一个行动单位，例如移动倒计时、开门倒计时或空闲等待。
 func (s *System) Step() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.stepMu.Lock()
+	defer s.stepMu.Unlock()
 
+	s.mu.Lock()
+	if s.elevatorRunnersStarted {
+		s.mu.Unlock()
+		return s.stepWithElevatorRunners()
+	}
+
+	defer s.mu.Unlock()
 	return s.stepLocked()
 }
 
@@ -181,6 +188,45 @@ func (s *System) stepLocked() error {
 		}
 	}
 	s.CurrentTick++
+	return nil
+}
+
+// stepWithElevatorRunners 在调度器完成分配后，把一个 tick 命令发送给每部电梯 goroutine。
+func (s *System) stepWithElevatorRunners() error {
+	s.mu.Lock()
+	if len(s.Elevators) == 0 {
+		s.mu.Unlock()
+		return fmt.Errorf("system has no elevators")
+	}
+
+	if s.scheduler == nil {
+		s.mu.Unlock()
+		return fmt.Errorf("No valid scheduler.")
+	}
+
+	assigned := s.scheduler.Assign(s)
+	if assigned {
+		log.Println("assigned one request")
+	}
+	commands := append([]chan elevatorTickCommand(nil), s.elevatorCommands...)
+	s.mu.Unlock()
+
+	doneChannels := make([]chan error, len(commands))
+	for i, commandChannel := range commands {
+		done := make(chan error, 1)
+		doneChannels[i] = done
+		commandChannel <- elevatorTickCommand{done: done}
+	}
+
+	for _, done := range doneChannels {
+		if err := <-done; err != nil {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	s.CurrentTick++
+	s.mu.Unlock()
 	return nil
 }
 

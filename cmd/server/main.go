@@ -36,6 +36,7 @@ func main() {
 	server := api.NewServer(system)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	system.StartElevatorRunners(ctx)
 	// 每隔 defaultAutoStepInterval 推进一次电梯系统，
 	// 模拟电梯的自动运行。
 	server.StartAutoStep(ctx, defaultAutoStepInterval)
