@@ -80,7 +80,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdRequest, err := s.System.AddRequestSnapshot(payload.Floor, payload.Direction, payload.Kind)
+	req, err := s.System.AddRequest(payload.Floor, payload.Direction, payload.Kind)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -88,8 +88,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]any{
 		"status":      "accepted",
-		"currentTick": createdRequest.CreatedTick,
-		"request":     createdRequest,
+		"currentTick": req.CreatedTick,
+		"request":     *req,
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

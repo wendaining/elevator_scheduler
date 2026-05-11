@@ -2971,3 +2971,72 @@ system.StartElevatorRunners(ctx)
 ```
 
 测试辅助函数 `startElevatorRunnersForTest` 用来减少重复代码。
+
+## 2026-05-11：去掉两处代码冗余
+
+本阶段清理了两处真正的冗余——不是并发模型的复杂度，而是实现了相同功能但代码绕弯的写法。
+
+### 冗余 1：`completeRequest` 的无意义 copy/copy-back
+
+**旧代码：**
+
+```go
+completedRequest := *req       // ① 值拷贝
+completedRequest.Status = RequestDone
+completedRequest.CompletedTick = completedTick
+s.requestStore.SaveCompletedRequest(completedRequest)  // ② 写副本到 DB
+*req = completedRequest        // ③ 把副本写回原指针
+delete(s.Requests, requestID)  // ④ 删除 map 条目
+```
+
+③ 更新了 `req` 指向的值（为了让外部持有该指针的测试代码能读到更新后的状态），然后 ④ 立刻从 map 删了。这个流程绕了两层拷贝，中间多了一个 `completedRequest` 变量。
+
+**新代码：**
+
+```go
+req.Status = RequestDone
+req.CompletedTick = completedTick
+s.requestStore.SaveCompletedRequest(*req)
+delete(s.Requests, requestID)
+```
+
+直接在指针上改字段，写 DB 时传 `*req` 即可。两行中间变量和一整次结构体拷贝被去掉。
+
+### 冗余 2：`AddRequest` + `AddRequestSnapshot` 两个公开方法做同一件事
+
+之前：
+
+```text
+AddRequest        返回 *Request → 测试用
+AddRequestSnapshot  返回 Request →  handler 用
+```
+
+底层 `addRequestLocked` 已经封装了全部创建逻辑，两个公开方法只是返回类型不同（指针 vs 值）。`AddRequestSnapshot` 的动机是"锁内创建 + 锁内拷贝，返回安全的值给 API 层"，但 `AddRequest` 也是锁内创建（`defer s.mu.Unlock()`），调用方在解锁后立即 `*req` 取值拷贝，效果完全一样。
+
+**改动：**
+
+- 删除 `AddRequestSnapshot`
+- handler 改用 `AddRequest`，需要值拷贝时直接用 `*req`（Go 的语法：取指针指向的值）
+
+```go
+// 旧
+createdRequest, err := s.System.AddRequestSnapshot(...)
+response := map[string]any{"request": createdRequest}
+
+// 新
+req, err := s.System.AddRequest(...)
+response := map[string]any{"request": *req}
+```
+
+### 顺便移动：`moveOneTick` 从 system.go 到 elevator_runner.go
+
+`moveOneTick` 只在 `stepElevatorState`（elavator_runner.go）中被调用，但定义在 system.go 里。移到调用的文件里，减少跨文件搜索。
+
+### 本次验证
+
+```bash
+go build ./...
+go test ./...
+```
+
+全部 20 个测试通过。

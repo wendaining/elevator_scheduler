@@ -68,25 +68,14 @@ func NewSystem(sc SystemConfig) (*System, error) {
 	}, nil
 }
 
-// AddRequest 向系统添加一个新的乘梯请求。先校验参数是否合法，再将请求保存到
-// Requests 中，并用 Status 标记它当前处于 pending 状态。
+// AddRequest 向系统添加一个新的乘梯请求。校验参数后创建请求并写入 Requests map。
+// 返回指向该请求的指针；调用方可以在锁外安全读取该指针，因为 Request 字段在创建后
+// 只会被 Step 修改（通过 completeRequest），而 Step 和 AddRequest 有各自的锁边界。
 func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	return s.addRequestLocked(floor, direction, kind)
-}
-
-// AddRequestSnapshot 创建请求并返回这个请求的值拷贝，适合 API 层返回给客户端。
-func (s *System) AddRequestSnapshot(floor int, direction Direction, kind RequestKind) (Request, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	request, err := s.addRequestLocked(floor, direction, kind)
-	if err != nil {
-		return Request{}, err
-	}
-	return *request, nil
 }
 
 func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKind) (*Request, error) {
@@ -159,18 +148,17 @@ func (s *System) Step() error {
 	s.stepMu.Lock()
 	defer s.stepMu.Unlock()
 
-	s.mu.Lock()
-	if !s.elevatorRunnersStarted {
-		s.mu.Unlock()
-		return fmt.Errorf("elevator runners are not started")
-	}
-	s.mu.Unlock()
 	return s.stepWithElevatorRunners()
 }
 
 // stepWithElevatorRunners 在调度器完成分配后，把一个 tick 命令发送给每部电梯 goroutine。
 func (s *System) stepWithElevatorRunners() error {
 	s.mu.Lock()
+	if !s.elevatorRunnersStarted {
+		s.mu.Unlock()
+		return fmt.Errorf("elevator runners are not started")
+	}
+
 	if len(s.Elevators) == 0 {
 		s.mu.Unlock()
 		return fmt.Errorf("system has no elevators")
@@ -185,7 +173,7 @@ func (s *System) stepWithElevatorRunners() error {
 	if assigned {
 		log.Println("assigned one request")
 	}
-
+	// 深拷贝的写法，把后者切片展开然后拷贝进一个空切片
 	commands := append([]chan elevatorTickCommand(nil), s.elevatorCommands...)
 	doneSignal := s.elevatorRunnersDone
 	if len(commands) != len(s.Elevators) {
@@ -260,18 +248,6 @@ func cloneElevator(e Elevator) Elevator {
 	return e
 }
 
-// moveOneTick 是一个辅助函数，用于将电梯 e 向目标方向移动一个 tick。
-// floorDelta 应该是 1（向上）或 -1（向下）。函数会更新电梯的 CurrentFloor 和 MoveRemainingTicks。
-func moveOneTick(e *Elevator, floorDelta int, ticksPerFloor int) {
-	if e.MoveRemainingTicks == 0 {
-		e.MoveRemainingTicks = ticksPerFloor
-	}
-	e.MoveRemainingTicks--
-	if e.MoveRemainingTicks == 0 {
-		e.CurrentFloor += floorDelta
-	}
-}
-
 // 给 System 添加一些辅助方法，方便调度器调用：
 
 // 用于将某个请求分配给某部电梯，更新请求状态并将停靠计划添加到电梯任务列表中。
@@ -294,16 +270,13 @@ func (s *System) completeRequest(requestID int64, completedTick int) error {
 		return nil
 	}
 
-	completedRequest := *req
-	completedRequest.Status = RequestDone
-	completedRequest.CompletedTick = completedTick
+	req.Status = RequestDone
+	req.CompletedTick = completedTick
 
-	// 先写数据库，再从运行态 map 删除
-	if err := s.requestStore.SaveCompletedRequest(completedRequest); err != nil {
+	if err := s.requestStore.SaveCompletedRequest(*req); err != nil {
 		return err
 	}
 
-	*req = completedRequest
 	delete(s.Requests, requestID)
 	return nil
 }

@@ -79,6 +79,17 @@ func (s *System) runElevator(ctx context.Context, elevatorIndex int, commands <-
 	}
 }
 
+// moveOneTick 将电梯向目标方向移动一个 tick。floorDelta 应为 1（向上）或 -1（向下）。
+func moveOneTick(e *Elevator, floorDelta int, ticksPerFloor int) {
+	if e.MoveRemainingTicks == 0 {
+		e.MoveRemainingTicks = ticksPerFloor
+	}
+	e.MoveRemainingTicks--
+	if e.MoveRemainingTicks == 0 {
+		e.CurrentFloor += floorDelta
+	}
+}
+
 // stepElevatorState 是单部电梯的纯状态推进函数。
 // 它只读输入参数，返回更新后的 Elevator 和本 tick 完成的请求 ID。
 func stepElevatorState(e Elevator, currentTick int, ticksPerFloor int, doorBaseTicks int) (Elevator, []int64, error) {
