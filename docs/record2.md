@@ -2753,3 +2753,175 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
 ```
 
 结果都通过。
+
+
+## 2026-05-11：移除手动 Step API，系统时间统一由后端时钟推进
+
+这次把 `POST /api/step` 和 API 层的手动 step 控制通道删除了。
+
+新的系统语义是：
+
+```text
+客户端只能创建请求和读取状态。
+系统时间只由 Go 后端的自动 ticker 推进。
+```
+
+也就是说，保留的核心 API 是：
+
+```text
+GET  /api/state
+POST /api/request
+```
+
+不再提供：
+
+```text
+POST /api/step
+```
+
+### 为什么删除手动 Step
+
+之前的设计里，`StartAutoStep` 同时支持：
+
+```text
+自动 ticker 触发 Step
+手动 POST /api/step 触发 Step
+```
+
+为了支持手动 Step，API 层需要维护：
+
+```text
+stepCommand
+stepCommands channel
+stepRunnerStarted
+RequestStep
+runStepCommand
+```
+
+但真实运行时，前端并不会展示“手动推进一个时间片”的按钮。
+
+电梯系统更自然的语义是：
+
+```text
+系统时钟一直运行。
+用户只负责发出乘梯请求。
+前端只负责轮询状态并渲染。
+```
+
+所以删除手动 Step 后，职责更清楚：
+
+```text
+internal/api/runner.go
+  只负责后台 ticker。
+
+internal/api/handler.go
+  只负责 health、state、request 和静态文件。
+
+web/app.js
+  定时 GET /api/state，不再 POST /api/step。
+```
+
+### `StartAutoStep` 简化后的逻辑
+
+现在 `StartAutoStep` 只做一件事：
+
+```text
+每隔 interval 调用一次 s.System.Step()
+```
+
+核心代码结构是：
+
+```go
+go func() {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.System.Step(); err != nil {
+				log.Printf("auto step failed: %v", err)
+			}
+		}
+	}
+}()
+```
+
+这里没有手动 step channel。
+
+`select` 只等待两件事：
+
+```text
+ctx.Done()
+  系统关闭，后台 goroutine 退出。
+
+ticker.C
+  到了下一个系统时间片，调用 System.Step()。
+```
+
+### 前端的变化
+
+之前前端的 `tick()` 做两件事：
+
+```text
+1. POST /api/step
+2. GET /api/state
+```
+
+现在改成：
+
+```text
+1. GET /api/state
+```
+
+原因是后端已经自己按固定间隔推进系统。
+
+前端只需要定时读取状态：
+
+```js
+setInterval(tick, 800);
+```
+
+这里的 `tick()` 只是前端刷新 UI 的节奏，不再等价于后端的系统时间片。
+
+后端真正的系统时间片由：
+
+```go
+defaultAutoStepInterval = 500 * time.Millisecond
+```
+
+控制。
+
+### 并发模型的简化
+
+删除手动 Step 后，系统推进路径变成：
+
+```text
+time.Ticker
+  -> StartAutoStep goroutine
+  -> System.Step()
+  -> scheduler.Assign()
+  -> elevatorCommands
+  -> 每部电梯 goroutine
+  -> elevatorTickResult
+  -> System.Step() 合并结果
+```
+
+请求进入系统的路径是：
+
+```text
+POST /api/request
+  -> System.AddRequestSnapshot()
+  -> 等下一次自动 Step 调度
+```
+
+状态读取路径是：
+
+```text
+GET /api/state
+  -> System.Snapshot()
+```
+
+这样推进时间的入口只有一个，API 表面也更接近真实电梯系统。

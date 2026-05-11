@@ -158,30 +158,18 @@ func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 	}
 }
 
-func TestRequestStepUsesControlChannel(t *testing.T) {
+func TestRegisterRoutesDoesNotExposeManualStep(t *testing.T) {
 	server := newTestServer(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
 
-	server.StartAutoStep(ctx, time.Hour)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/step", nil)
 
-	if err := server.RequestStep(context.Background()); err != nil {
-		t.Fatalf("RequestStep returned error: %v", err)
-	}
+	mux.ServeHTTP(response, request)
 
-	data, err := server.System.Snapshot()
-	if err != nil {
-		t.Fatalf("Snapshot returned error: %v", err)
-	}
-
-	var snapshot struct {
-		CurrentTick int `json:"currentTick"`
-	}
-	if err := json.Unmarshal(data, &snapshot); err != nil {
-		t.Fatalf("Unmarshal snapshot returned error: %v", err)
-	}
-	if snapshot.CurrentTick != 1 {
-		t.Fatalf("current tick = %d, want 1", snapshot.CurrentTick)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status code = %d, want %d", response.Code, http.StatusNotFound)
 	}
 }
 

@@ -124,18 +124,6 @@ async function submitRequest(floor, direction, kind) {
   }
 }
 
-async function advanceOneStep() {
-  // 这是同步模型阶段的临时调试接口。
-  // 它会让后端模拟推进一次 Step()。
-  const response = await fetch("/api/step", {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error(`POST /api/step failed: ${response.status}`);
-  }
-}
-
 function renderState(state) {
   schedulerText.textContent = `Scheduler: ${state.schedulerName || "-"}`;
 
@@ -153,14 +141,24 @@ function renderState(state) {
       createField(elevator.currentFloor, "Floor"),
       createField(elevator.direction, "Direction"),
       createField(elevator.doorOpen ? "Open" : "Closed", "Door"),
-      createField(elevator.targetFloors.join(", ") || "-", "Targets"),
+      createField(formatStops(elevator.stops), "Stops"),
     );
 
     elevatorList.append(card);
   }
 
   // 把待处理请求格式化成 JSON，方便学习和调试时查看。
-  pendingRequests.textContent = JSON.stringify(state.pendingRequests, null, 2);
+  pendingRequests.textContent = JSON.stringify(state.requests || {}, null, 2);
+}
+
+function formatStops(stops) {
+  if (!stops || stops.length === 0) {
+    return "-";
+  }
+
+  return stops
+    .map((stop) => `${stop.floor}F/${stop.reason}`)
+    .join(", ");
 }
 
 function createField(value, label) {
@@ -195,11 +193,8 @@ async function refreshState() {
 
 async function tick() {
   try {
-    // 这个学习页里的临时循环：
-    // 1. 请求后端模拟推进一个时间片
-    // 2. 读取后端最新状态
-    // 3. 把状态渲染到 DOM 上
-    await advanceOneStep();
+    // 系统时间由 Go 后端的后台 ticker 自动推进。
+    // 前端定时读取状态即可，不再手动调用 Step API。
     await refreshState();
   } catch (error) {
     statusText.textContent = error.message;
