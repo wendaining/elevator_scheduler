@@ -130,6 +130,7 @@ func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	server.System.StartElevatorRunners(ctx)
 	server.StartAutoStep(ctx, time.Millisecond)
 
 	deadline := time.After(200 * time.Millisecond)

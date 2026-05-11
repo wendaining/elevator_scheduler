@@ -160,35 +160,12 @@ func (s *System) Step() error {
 	defer s.stepMu.Unlock()
 
 	s.mu.Lock()
-	if s.elevatorRunnersStarted {
+	if !s.elevatorRunnersStarted {
 		s.mu.Unlock()
-		return s.stepWithElevatorRunners()
+		return fmt.Errorf("elevator runners are not started")
 	}
-
-	defer s.mu.Unlock()
-	return s.stepLocked()
-}
-
-func (s *System) stepLocked() error {
-	if len(s.Elevators) == 0 {
-		return fmt.Errorf("system has no elevators")
-	}
-
-	if s.scheduler == nil {
-		return fmt.Errorf("No valid scheduler.")
-	}
-
-	assigned := s.scheduler.Assign(s)
-	if assigned {
-		log.Println("assigned one request")
-	}
-	for i := range s.Elevators {
-		if err := stepElevator(s, &s.Elevators[i]); err != nil {
-			return err
-		}
-	}
-	s.CurrentTick++
-	return nil
+	s.mu.Unlock()
+	return s.stepWithElevatorRunners()
 }
 
 // stepWithElevatorRunners 在调度器完成分配后，把一个 tick 命令发送给每部电梯 goroutine。
@@ -281,26 +258,6 @@ func cloneElevator(e Elevator) Elevator {
 		e.Stops[i].RequestIDs = append([]int64(nil), e.Stops[i].RequestIDs...)
 	}
 	return e
-}
-
-func stepElevator(s *System, e *Elevator) error {
-	updatedElevator, completedRequestIDs, err := stepElevatorState(
-		*e,
-		s.CurrentTick,
-		s.TicksPerFloor,
-		s.DoorBaseTicks,
-	)
-	if err != nil {
-		return err
-	}
-
-	*e = updatedElevator
-	for _, requestID := range completedRequestIDs {
-		if err := s.completeRequest(requestID, s.CurrentTick); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // moveOneTick 是一个辅助函数，用于将电梯 e 向目标方向移动一个 tick。

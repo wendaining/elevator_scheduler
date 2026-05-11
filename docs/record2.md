@@ -2545,21 +2545,17 @@ for 循环推进所有电梯
 CurrentTick++
 ```
 
-现在 `Step()` 会先判断：
+现在 `Step()` 会先检查电梯 goroutine 是否已经启动：
 
 ```go
-if s.elevatorRunnersStarted {
-	return s.stepWithElevatorRunners()
+if !s.elevatorRunnersStarted {
+	return fmt.Errorf("elevator runners are not started")
 }
+
+return s.stepWithElevatorRunners()
 ```
 
-如果没有启动电梯 goroutine，就保留旧同步逻辑：
-
-```go
-return s.stepLocked()
-```
-
-这样测试和旧代码不会被迫全部改掉。
+也就是说，`Step()` 只有一条正式推进路径：`stepWithElevatorRunners()`。
 
 ### `stepWithElevatorRunners`
 
@@ -2925,3 +2921,53 @@ GET /api/state
 ```
 
 这样推进时间的入口只有一个，API 表面也更接近真实电梯系统。
+
+## 2026-05-11：删除 Step 的同步推进路径
+
+这次删除了 `internal/elevator/system.go` 里的 `stepLocked()` 和同步用的 `stepElevator()` 封装。
+
+原因是当前服务启动顺序已经固定为：
+
+```text
+NewSystem
+StartElevatorRunners
+StartAutoStep
+```
+
+也就是说，真实运行时调用 `System.Step()` 之前，每部电梯的 goroutine 已经启动。
+
+因此 `Step()` 不再需要维护两套路径：
+
+```text
+旧路径 1：没启动 elevator runners 时，走 stepLocked()
+旧路径 2：启动 elevator runners 后，走 stepWithElevatorRunners()
+```
+
+现在只保留正式路径：
+
+```text
+System.Step()
+  -> stepWithElevatorRunners()
+```
+
+如果有人在没有调用 `StartElevatorRunners()` 的情况下直接调用 `Step()`，会返回错误：
+
+```text
+elevator runners are not started
+```
+
+这样做的好处是：
+
+```text
+代码里只有一种系统推进模型
+测试和服务启动流程保持一致
+读 Step() 时不会误以为同步路径也是正式运行模式
+```
+
+对应地，测试里凡是需要调用 `Step()` 的地方，也都先调用：
+
+```go
+system.StartElevatorRunners(ctx)
+```
+
+测试辅助函数 `startElevatorRunnersForTest` 用来减少重复代码。

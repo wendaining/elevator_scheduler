@@ -804,24 +804,24 @@ case <-doneSignal:
 是否已经启动了每部电梯的 goroutine。
 ```
 
-`Step()` 会根据它选择路径：
+`Step()` 会检查它：
 
 ```go
-if s.elevatorRunnersStarted {
-	return s.stepWithElevatorRunners()
+if !s.elevatorRunnersStarted {
+	return fmt.Errorf("elevator runners are not started")
 }
 
-return s.stepLocked()
+return s.stepWithElevatorRunners()
 ```
 
 也就是说：
 
 ```text
-启动了电梯 goroutine：走并发路径。
-没启动电梯 goroutine：走同步路径。
+启动了电梯 goroutine：推进一个系统 tick。
+没启动电梯 goroutine：直接返回错误。
 ```
 
-同步路径主要方便测试和保留兼容性。
+项目现在不再保留同步推进路径，避免出现两套 Step 语义。
 
 ## 启动流程
 
@@ -883,13 +883,12 @@ func (s *System) Step() error {
 	defer s.stepMu.Unlock()
 
 	s.mu.Lock()
-	if s.elevatorRunnersStarted {
+	if !s.elevatorRunnersStarted {
 		s.mu.Unlock()
-		return s.stepWithElevatorRunners()
+		return fmt.Errorf("elevator runners are not started")
 	}
-
-	defer s.mu.Unlock()
-	return s.stepLocked()
+	s.mu.Unlock()
+	return s.stepWithElevatorRunners()
 }
 ```
 
@@ -1505,54 +1504,48 @@ Requests map 只在 System.mu 保护下修改。
 SQLite 写入也集中在 System 的状态合并阶段。
 ```
 
-## 同步路径 `stepLocked` 为什么还在
+## 为什么删除同步路径 `stepLocked`
 
-`System.Step()` 里还有：
-
-```go
-if s.elevatorRunnersStarted {
-	s.mu.Unlock()
-	return s.stepWithElevatorRunners()
-}
-
-defer s.mu.Unlock()
-return s.stepLocked()
-```
-
-也就是说，如果没有启动电梯 goroutine，会走：
+服务启动时一定会先调用：
 
 ```go
-stepLocked()
+system.StartElevatorRunners(ctx)
 ```
 
-这个同步路径的作用是：
+然后自动时钟才会调用：
+
+```go
+server.StartAutoStep(ctx, defaultAutoStepInterval)
+```
+
+所以实际运行路径只有一条：
 
 ```text
-让 System 在没有启动后台 runner 的测试里仍然能工作。
-让核心状态推进逻辑可以被更简单地测试。
-保留一种不依赖 goroutine 的调用方式。
+StartElevatorRunners
+  -> StartAutoStep
+  -> System.Step()
+  -> stepWithElevatorRunners()
 ```
 
-同步路径内部仍然调用：
-
-```go
-stepElevator(s, &s.Elevators[i])
-```
-
-而 `stepElevator` 现在只是对 `stepElevatorState` 的封装：
-
-```go
-func stepElevator(s *System, e *Elevator) error {
-	updatedElevator, completedRequestIDs, err := stepElevatorState(...)
-	...
-}
-```
-
-这样做的好处是：
+如果保留 `stepLocked()`，读代码时会产生误解：
 
 ```text
-同步路径和并发路径复用同一套单部电梯运行逻辑。
-不会出现“同步版本一种行为，并发版本另一种行为”。
+好像系统同时支持“同步推进”和“并发推进”两种正式模型。
+```
+
+现在删除它后，`Step()` 的语义更单一：
+
+```text
+Step() 必须在电梯 goroutine 已启动后调用。
+Step() 永远通过 stepWithElevatorRunners 推进系统。
+```
+
+测试也按真实服务启动顺序写：
+
+```text
+NewSystem
+StartElevatorRunners
+Step
 ```
 
 ## 自动时钟 runner 和电梯 runner 的关系

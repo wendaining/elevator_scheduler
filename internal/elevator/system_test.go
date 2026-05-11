@@ -19,6 +19,7 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
+	startElevatorRunnersForTest(t, system)
 
 	request, err := system.AddRequest(4, DirectionUp, RequestKindHall)
 	if err != nil {
@@ -68,6 +69,7 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
+	startElevatorRunnersForTest(t, system)
 
 	request, err := system.AddRequest(2, DirectionUp, RequestKindHall)
 	if err != nil {
@@ -142,6 +144,7 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
+	startElevatorRunnersForTest(t, system)
 
 	request, err := system.AddRequest(2, DirectionUp, RequestKindHall)
 	if err != nil {
@@ -225,6 +228,7 @@ func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSystemWithDatabase returned error: %v", err)
 	}
+	startElevatorRunnersForTest(t, firstSystem)
 	request, err := firstSystem.AddRequest(2, DirectionUp, RequestKindHall)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
@@ -283,8 +287,8 @@ func TestStepWithElevatorRunnersAdvancesEachElevator(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	system.StartElevatorRunners(ctx)
+	t.Cleanup(cancel)
 
 	if err := system.Step(); err != nil {
 		t.Fatalf("Step returned error: %v", err)
@@ -299,6 +303,14 @@ func TestStepWithElevatorRunnersAdvancesEachElevator(t *testing.T) {
 	if system.CurrentTick != 1 {
 		t.Fatalf("current tick = %d, want 1", system.CurrentTick)
 	}
+}
+
+func startElevatorRunnersForTest(t *testing.T, system *System) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	system.StartElevatorRunners(ctx)
+	t.Cleanup(cancel)
 }
 
 func TestStopPlanKeepsSameFloorDifferentReasonsSeparate(t *testing.T) {
