@@ -208,85 +208,98 @@ func (s *System) stepWithElevatorRunners() error {
 	if assigned {
 		log.Println("assigned one request")
 	}
-	commands := append([]chan elevatorTickCommand(nil), s.elevatorCommands...)
-	s.mu.Unlock()
 
-	doneChannels := make([]chan error, len(commands))
-	for i, commandChannel := range commands {
-		done := make(chan error, 1)
-		doneChannels[i] = done
-		commandChannel <- elevatorTickCommand{done: done}
+	commands := append([]chan elevatorTickCommand(nil), s.elevatorCommands...)
+	doneSignal := s.elevatorRunnersDone
+	if len(commands) != len(s.Elevators) {
+		s.mu.Unlock()
+		return fmt.Errorf("elevator runner count %d does not match elevator count %d", len(commands), len(s.Elevators))
 	}
 
-	for _, done := range doneChannels {
-		if err := <-done; err != nil {
-			return err
+	elevators := make([]Elevator, len(s.Elevators))
+	for i := range s.Elevators {
+		elevators[i] = cloneElevator(s.Elevators[i])
+	}
+	currentTick := s.CurrentTick
+	ticksPerFloor := s.TicksPerFloor
+	doorBaseTicks := s.DoorBaseTicks
+	s.mu.Unlock()
+
+	doneChannels := make([]chan elevatorTickResult, len(commands))
+	for i, commandChannel := range commands {
+		done := make(chan elevatorTickResult, 1)
+		doneChannels[i] = done
+		command := elevatorTickCommand{
+			elevator:      elevators[i],
+			currentTick:   currentTick,
+			ticksPerFloor: ticksPerFloor,
+			doorBaseTicks: doorBaseTicks,
+			done:          done,
+		}
+		select {
+		case commandChannel <- command:
+		case <-doneSignal:
+			return fmt.Errorf("elevator runners stopped")
+		}
+	}
+
+	results := make([]elevatorTickResult, len(doneChannels))
+	for i, done := range doneChannels {
+		select {
+		case result := <-done:
+			if result.err != nil {
+				return result.err
+			}
+			results[i] = result
+		case <-doneSignal:
+			return fmt.Errorf("elevator runners stopped")
 		}
 	}
 
 	s.mu.Lock()
-	s.CurrentTick++
-	s.mu.Unlock()
-	return nil
-}
+	defer s.mu.Unlock()
 
-// stepElevator 推进单部电梯一个行动 tick。
-// 跨越相邻两层需要消耗 s.TicksPerFloor 个 tick；
-// 到达目标层后，再用 s.DoorBaseTicks 表示开门停靠时间。
-func stepElevator(s *System, e *Elevator) error {
-	// 紧急停止状态下不移动
-	if e.EmergencyStop {
-		e.Direction = DirectionIdle
-		return nil
-	}
-
-	// 门开着时，当前 tick 用于停靠，不移动。
-	if e.DoorOpen {
-		if e.DoorRemainingTicks > 0 {
-			e.DoorRemainingTicks--
-		}
-		if e.DoorRemainingTicks == 0 {
-			e.DoorOpen = false
-		}
-		e.Direction = DirectionIdle
-		return nil
-	}
-
-	// 没有停靠计划，保持空闲
-	if len(e.Stops) == 0 {
-		e.Direction = DirectionIdle
-		return nil
-	}
-
-	nextStop := e.Stops[0]
-	targetFloor := nextStop.Floor
-
-	// 当前已经在目标楼层：本 tick 用于开门、完成请求、移除目标。
-	if e.CurrentFloor == targetFloor {
-		e.Direction = DirectionIdle
-		e.DoorOpen = true
-		e.DoorRemainingTicks = s.DoorBaseTicks
-		for _, requestID := range nextStop.RequestIDs {
-			if err := s.completeRequest(requestID, s.CurrentTick); err != nil {
+	for i, result := range results {
+		s.Elevators[i] = result.elevator
+		for _, requestID := range result.completedRequestIDs {
+			if err := s.completeRequest(requestID, currentTick); err != nil {
 				return err
 			}
 		}
-		e.Stops = e.Stops[1:]
-		if e.DoorRemainingTicks == 0 {
-			e.DoorOpen = false
+	}
+	s.CurrentTick++
+	return nil
+}
+
+func cloneElevator(e Elevator) Elevator {
+	if len(e.Stops) == 0 {
+		return e
+	}
+
+	e.Stops = append([]StopPlan(nil), e.Stops...)
+	for i := range e.Stops {
+		e.Stops[i].RequestIDs = append([]int64(nil), e.Stops[i].RequestIDs...)
+	}
+	return e
+}
+
+func stepElevator(s *System, e *Elevator) error {
+	updatedElevator, completedRequestIDs, err := stepElevatorState(
+		*e,
+		s.CurrentTick,
+		s.TicksPerFloor,
+		s.DoorBaseTicks,
+	)
+	if err != nil {
+		return err
+	}
+
+	*e = updatedElevator
+	for _, requestID := range completedRequestIDs {
+		if err := s.completeRequest(requestID, s.CurrentTick); err != nil {
+			return err
 		}
-		return nil
 	}
-
-	// 当前不在目标楼层：本 tick 用于向目标方向移动。
-	if e.CurrentFloor < targetFloor {
-		e.Direction = DirectionUp
-		moveOneTick(e, 1, s.TicksPerFloor)
-		return nil
-	}
-
-	e.Direction = DirectionDown
-	moveOneTick(e, -1, s.TicksPerFloor)
 	return nil
 }
 

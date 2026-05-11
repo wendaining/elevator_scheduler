@@ -275,16 +275,16 @@ func TestStepWithElevatorRunnersAdvancesEachElevator(t *testing.T) {
 	}
 	defer system.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	system.StartElevatorRunners(ctx)
-
 	system.Elevators[0].Stops = []StopPlan{
 		{Floor: 2, Reason: StopReasonCabin, Direction: DirectionIdle},
 	}
 	system.Elevators[1].Stops = []StopPlan{
 		{Floor: 3, Reason: StopReasonCabin, Direction: DirectionIdle},
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	system.StartElevatorRunners(ctx)
 
 	if err := system.Step(); err != nil {
 		t.Fatalf("Step returned error: %v", err)

@@ -102,8 +102,6 @@ type Elevator struct {
 }
 
 // System 表示整个电梯调度系统。
-//
-// 在第一版模型中，此结构体仅描述状态。它尚未包含 goroutine、channel 或调度算法。
 type System struct {
 	mu     sync.Mutex
 	stepMu sync.Mutex
@@ -138,6 +136,7 @@ type System struct {
 	requestStore *RequestStore `json:"-"`
 
 	elevatorCommands       []chan elevatorTickCommand
+	elevatorRunnersDone    <-chan struct{}
 	elevatorRunnersStarted bool
 
 	nextRequestID int64
