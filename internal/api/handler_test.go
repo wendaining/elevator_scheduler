@@ -158,6 +158,33 @@ func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 	}
 }
 
+func TestRequestStepUsesControlChannel(t *testing.T) {
+	server := newTestServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	server.StartAutoStep(ctx, time.Hour)
+
+	if err := server.RequestStep(context.Background()); err != nil {
+		t.Fatalf("RequestStep returned error: %v", err)
+	}
+
+	data, err := server.System.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot returned error: %v", err)
+	}
+
+	var snapshot struct {
+		CurrentTick int `json:"currentTick"`
+	}
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		t.Fatalf("Unmarshal snapshot returned error: %v", err)
+	}
+	if snapshot.CurrentTick != 1 {
+		t.Fatalf("current tick = %d, want 1", snapshot.CurrentTick)
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
@@ -178,7 +205,7 @@ func newTestServer(t *testing.T) *Server {
 		}
 	})
 
-	return &Server{System: system}
+	return NewServer(system)
 }
 
 func assertTextError(t *testing.T, body string) {

@@ -33,7 +33,7 @@ func main() {
 	}
 	defer system.Close()
 
-	server := &api.Server{System: system}
+	server := api.NewServer(system)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// 每隔 defaultAutoStepInterval 推进一次电梯系统，

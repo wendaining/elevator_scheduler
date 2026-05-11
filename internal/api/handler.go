@@ -12,7 +12,16 @@ import (
 // Server 持有所有 HTTP handler 需要的依赖。
 // 后续新增的依赖（配置、日志等）只需要在这里加字段，不影响 handler 函数签名。
 type Server struct {
-	System *elevator.System
+	System            *elevator.System
+	stepCommands      chan stepCommand
+	stepRunnerStarted bool
+}
+
+// NewServer 创建 API server，并初始化内部控制 channel。
+func NewServer(system *elevator.System) *Server {
+	return &Server{
+		System: system,
+	}
 }
 
 // RegisterRoutes 把所有 API 路由注册到 mux 上。
@@ -99,7 +108,7 @@ func (s *Server) handleStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.System.Step(); err != nil {
+	if err := s.RequestStep(r.Context()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

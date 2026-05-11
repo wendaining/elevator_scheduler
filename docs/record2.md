@@ -1564,3 +1564,699 @@ API 和测试都使用它
 ```
 
 这一步对于并发代码很重要。普通 `go test` 通过，不代表没有数据竞争；`go test -race` 更适合检查这类问题。
+
+## 2026-05-10：使用 channel 传递 step 控制信号
+
+这次完成第 7 阶段并发路线的第二步：
+
+```text
+使用 channel 传递请求或控制信号
+```
+
+### Go channel 基础机制
+
+channel 可以先理解成：
+
+```text
+goroutine 之间传递消息的管道
+```
+
+如果 mutex 的思路是：
+
+```text
+多个 goroutine 共享同一份变量
+访问变量前先抢锁
+```
+
+那么 channel 的思路更像是：
+
+```text
+一个 goroutine 把消息发出去
+另一个 goroutine 收到消息后再处理
+```
+
+Go 里创建 channel 的语法是：
+
+```go
+ch := make(chan int)
+```
+
+这表示创建一个传递 `int` 的 channel。
+
+如果要传递自定义结构体，也可以写：
+
+```go
+type command struct {
+	name string
+}
+
+ch := make(chan command)
+```
+
+本项目里这次用的就是类似这种方式：
+
+```go
+stepCommands chan stepCommand
+```
+
+意思是：
+
+```text
+stepCommands 这个 channel 只能传 stepCommand 类型的消息
+```
+
+#### 发送和接收
+
+发送消息：
+
+```go
+ch <- value
+```
+
+意思是：
+
+```text
+把 value 发送到 ch 这个 channel 里
+```
+
+接收消息：
+
+```go
+value := <-ch
+```
+
+意思是：
+
+```text
+从 ch 这个 channel 里取出一个 value
+```
+
+箭头 `<-` 的方向可以帮助记忆：
+
+```text
+ch <- value
+  value 流向 channel
+
+value := <-ch
+  value 从 channel 流出
+```
+
+#### 无缓冲 channel 会阻塞
+
+默认创建的是无缓冲 channel：
+
+```go
+ch := make(chan int)
+```
+
+无缓冲 channel 的特点是：
+
+```text
+发送方和接收方必须同时准备好
+```
+
+如果只有发送方：
+
+```go
+ch <- 1
+```
+
+但没有任何 goroutine 正在接收：
+
+```go
+value := <-ch
+```
+
+发送方就会卡住。
+
+反过来，如果只有接收方在等，但没人发送，接收方也会卡住。
+
+这和普通数组或队列不一样。无缓冲 channel 更像一次“交接”：
+
+```text
+发送方把东西递出去
+接收方必须同时伸手接
+交接完成后双方才继续运行
+```
+
+#### 有缓冲 channel
+
+也可以创建有缓冲 channel：
+
+```go
+ch := make(chan int, 1)
+```
+
+第二个参数 `1` 表示容量。
+
+有缓冲 channel 可以先暂存消息。
+
+例如容量为 1 时：
+
+```text
+channel 为空时，发送一个值通常不会阻塞
+channel 满了以后，继续发送才会阻塞
+```
+
+本轮代码里：
+
+```go
+done := make(chan error, 1)
+```
+
+就是一个容量为 1 的 channel。
+
+它的作用是：runner 执行完 step 后，把 `error` 或 `nil` 放进去。即使发送方因为 HTTP 请求取消已经返回了，runner 往 `done` 里放一个结果也不容易卡住。
+
+#### channel 常用于“请求-响应”
+
+channel 不只能传简单数据，也可以传一个带“回信 channel”的结构体。
+
+例如：
+
+```go
+type stepCommand struct {
+	done chan error
+}
+```
+
+这表示：
+
+```text
+发送方发出 stepCommand
+stepCommand 里带着一个 done channel
+接收方执行完任务后，把结果写回 done
+```
+
+整体像这样：
+
+```text
+发送方：
+  1. 创建 done channel
+  2. 把 done 放进 command
+  3. 把 command 发给 runner
+  4. 等待 done 返回结果
+
+runner：
+  1. 从 command channel 收到 command
+  2. 执行 System.Step()
+  3. 把结果发送到 command.done
+```
+
+这就是本轮 `POST /api/step` 使用的模式。
+
+#### select 是等待多个 channel
+
+如果一个 goroutine 只等一个 channel，可以写：
+
+```go
+command := <-s.stepCommands
+```
+
+但 runner 同时要等三种事件：
+
+```text
+ctx.Done()       退出信号
+ticker.C         自动 step 时间到了
+stepCommands     手动 step 命令来了
+```
+
+所以使用：
+
+```go
+select {
+case <-ctx.Done():
+	return
+case <-ticker.C:
+	...
+case command := <-s.stepCommands:
+	...
+}
+```
+
+`select` 的含义是：
+
+```text
+等待多个 channel
+哪个 channel 先准备好，就执行哪个 case
+```
+
+这就是为什么后面的 runner 可以同时支持：
+
+```text
+自动 ticker
+手动 step 命令
+退出信号
+```
+
+#### channel 和 mutex 不是互相替代
+
+这里容易误解：用了 channel，是不是就不需要 mutex？
+
+不一定。
+
+当前项目里：
+
+```text
+channel
+  用来传递控制信号，例如“请执行一次 Step”
+
+mutex
+  仍然在 System 内部保护共享状态
+```
+
+也就是说：
+
+```text
+channel 负责通信
+mutex 负责保护共享数据
+```
+
+后续如果改成更彻底的单线程事件循环，可能减少 mutex 的使用。但当前阶段两者同时存在是合理的。
+
+本轮选择先传递“控制信号”，也就是：
+
+```text
+手动 step 请求
+```
+
+暂时不通过 channel 传递乘梯请求，也不做每部电梯一个 goroutine。
+
+### 为什么先传控制信号
+
+当前项目里已经有后台 goroutine 自动调用：
+
+```go
+System.Step()
+```
+
+同时也保留了手动 API：
+
+```text
+POST /api/step
+```
+
+如果两边都直接调用 `System.Step()`，虽然 `System` 内部已经有 mutex，数据竞争问题可以避免，但控制流仍然比较分散：
+
+```text
+后台 ticker 直接 Step
+HTTP handler 也直接 Step
+```
+
+这次引入 channel 后，手动 step 会先变成一个控制信号，发送给后台 runner：
+
+```text
+POST /api/step
+  -> RequestStep(...)
+  -> stepCommands channel
+  -> runner goroutine
+  -> System.Step()
+```
+
+这样做的意义是：先建立“通过 channel 给后台循环发送控制命令”的模式。
+
+### `stepCommand`
+
+`internal/api/runner.go` 新增：
+
+```go
+type stepCommand struct {
+	done chan error
+}
+```
+
+`stepCommand` 表示一次“请执行 Step”的控制信号。
+
+里面的：
+
+```go
+done chan error
+```
+
+用于把执行结果传回发送方。
+
+也就是说，这不是一个单向通知，而是一次请求-响应：
+
+```text
+发送方：请你 step 一次
+runner：执行 System.Step()
+runner：把 error 或 nil 发回 done
+发送方：收到结果后继续返回 HTTP 响应
+```
+
+### `Server` 里新增 channel
+
+`internal/api/handler.go` 里：
+
+```go
+type Server struct {
+	System            *elevator.System
+	stepCommands      chan stepCommand
+	stepRunnerStarted bool
+}
+```
+
+字段含义：
+
+```text
+System
+  电梯系统核心状态。
+
+stepCommands
+  发送 step 控制信号的 channel。
+
+stepRunnerStarted
+  标记后台 runner 是否已经启动。
+```
+
+### 为什么新增 `NewServer`
+
+新增：
+
+```go
+func NewServer(system *elevator.System) *Server {
+	return &Server{
+		System: system,
+	}
+}
+```
+
+现在 `main.go` 使用：
+
+```go
+server := api.NewServer(system)
+```
+
+而不是：
+
+```go
+server := &api.Server{System: system}
+```
+
+这样后续如果 `Server` 需要初始化更多内部字段，可以集中放在 `NewServer` 里，不让 `main.go` 知道太多内部细节。
+
+当前 `stepCommands` 仍然在 `StartAutoStep` 里初始化，这样测试中不启动 runner 时也可以直接走同步 fallback。
+
+### `StartAutoStep` 的新结构
+
+现在 `StartAutoStep` 做两件事：
+
+```go
+s.ensureStepCommands()
+s.stepRunnerStarted = true
+```
+
+然后启动后台 goroutine：
+
+```go
+go func() {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.runStepCommand(nil)
+		case command := <-s.stepCommands:
+			s.runStepCommand(command.done)
+		}
+	}
+}()
+```
+
+这个 `select` 现在等待三个事件：
+
+```text
+ctx.Done()
+  外部要求 runner 停止。
+
+ticker.C
+  到了自动 step 的时间。
+
+s.stepCommands
+  收到一次手动 step 控制信号。
+```
+
+也就是说，后台 runner 现在不只是定时器，也接收外部命令。
+
+### 自动 step 和手动 step 的区别
+
+自动 step：
+
+```go
+case <-ticker.C:
+	s.runStepCommand(nil)
+```
+
+传入 `nil`，表示不需要把结果传给某个等待者。
+
+手动 step：
+
+```go
+case command := <-s.stepCommands:
+	s.runStepCommand(command.done)
+```
+
+传入 `command.done`，表示执行完以后要把结果发回去。
+
+### `runStepCommand`
+
+```go
+func (s *Server) runStepCommand(done chan<- error) {
+	err := s.System.Step()
+	if err != nil {
+		log.Printf("step failed: %v", err)
+	}
+	if done != nil {
+		done <- err
+	}
+}
+```
+
+这个函数统一执行一次 step。
+
+如果是自动 ticker 触发：
+
+```go
+s.runStepCommand(nil)
+```
+
+执行完只记录日志，不通知别人。
+
+如果是手动 API 触发：
+
+```go
+s.runStepCommand(command.done)
+```
+
+执行完会通过 `done` channel 把结果传回发送方。
+
+### `RequestStep`
+
+`POST /api/step` 现在不直接调用 `System.Step()`，而是调用：
+
+```go
+func (s *Server) RequestStep(ctx context.Context) error
+```
+
+它的核心流程：
+
+```go
+done := make(chan error, 1)
+command := stepCommand{done: done}
+
+select {
+case s.stepCommands <- command:
+case <-ctx.Done():
+	return ctx.Err()
+}
+
+select {
+case err := <-done:
+	return err
+case <-ctx.Done():
+	return ctx.Err()
+}
+```
+
+第一段 `select`：
+
+```text
+尝试把 command 发给 runner
+如果 HTTP 请求被取消，就返回 ctx.Err()
+```
+
+第二段 `select`：
+
+```text
+等待 runner 执行完 Step 并返回结果
+如果 HTTP 请求中途取消，也返回 ctx.Err()
+```
+
+这里使用 `ctx` 的原因是：HTTP 请求本身可能断开或超时。后端不应该在客户端已经离开后还永远等着。
+
+### 为什么 `done` 是 buffered channel
+
+这里写的是：
+
+```go
+done := make(chan error, 1)
+```
+
+容量是 1。
+
+这样 runner 执行完以后：
+
+```go
+done <- err
+```
+
+不会因为发送方刚好已经因为 `ctx.Done()` 返回而永久阻塞。
+
+这是一个小的防御性设计。
+
+### `handleStep` 现在怎么走
+
+`internal/api/handler.go` 里：
+
+```go
+if err := s.RequestStep(r.Context()); err != nil {
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+	return
+}
+
+data, err := s.System.Snapshot()
+```
+
+也就是说：
+
+```text
+HTTP handler
+  不直接 Step
+  通过 RequestStep 发 channel 控制信号
+  等 runner 执行完
+  再读取 Snapshot 返回
+```
+
+### 为什么保留 fallback
+
+`RequestStep` 里有：
+
+```go
+if !s.stepRunnerStarted {
+	return s.System.Step()
+}
+```
+
+这是为了测试和渐进式重构。
+
+有些测试只创建 `Server`，但没有启动 `StartAutoStep`。如果没有 fallback，`RequestStep` 会往一个没人接收的 channel 发送命令，然后卡住。
+
+所以当前语义是：
+
+```text
+runner 已启动：
+  通过 channel 发 step 控制信号
+
+runner 未启动：
+  直接同步调用 System.Step()
+```
+
+正式服务里，`main.go` 会启动：
+
+```go
+server.StartAutoStep(ctx, defaultAutoStepInterval)
+```
+
+所以正式运行时会走 channel。
+
+### 当前并发边界
+
+现在的边界是：
+
+```text
+System
+  仍然用 mutex 保护内部状态。
+
+runner goroutine
+  负责接收 ticker 和 stepCommands。
+
+POST /api/step
+  通过 channel 请求 runner 执行一次 Step。
+
+POST /api/request
+  仍然直接调用 System.AddRequestSnapshot。
+```
+
+也就是说，这一步只把“控制信号”接入 channel。
+
+乘梯请求本身还没有通过 channel 进入后台循环。后续如果继续推进，可以把：
+
+```text
+POST /api/request
+```
+
+也改成发送：
+
+```text
+AddRequestCommand
+```
+
+给后台事件循环处理。
+
+### 这和每部电梯 goroutine 的关系
+
+这一步仍然不是最终模型。
+
+它只是先建立了：
+
+```text
+API -> channel -> runner goroutine -> System
+```
+
+下一步设计每部电梯 goroutine 时，可以继续扩展成：
+
+```text
+API -> request channel -> scheduler/event loop
+scheduler -> elevator control channel -> elevator goroutine
+elevator goroutine -> state update channel -> System snapshot
+```
+
+但如果一开始就做这一整套，会很难阅读和调试。
+
+### 新增测试
+
+新增测试：
+
+```go
+TestRequestStepUsesControlChannel
+```
+
+测试流程：
+
+```text
+1. 创建 Server
+2. 启动 StartAutoStep，但 interval 设置成很长
+3. 调用 RequestStep
+4. 检查 CurrentTick 变成 1
+```
+
+interval 设置成 `time.Hour` 是为了避免自动 ticker 干扰测试，让 tick 增加只来自手动 channel 控制信号。
+
+### 本次验证
+
+普通测试：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+```
+
+race 检查：
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+结果都通过。
