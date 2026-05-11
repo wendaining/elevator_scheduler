@@ -69,6 +69,27 @@ func TestSCANSchedulerSortsDownStopsInDescendingOrder(t *testing.T) {
 	}
 }
 
+func TestSCANSchedulerUsesCostStopPenalty(t *testing.T) {
+	system := newSCANTestSystem(t, 2)
+	system.Elevators[0].CurrentFloor = 4
+	system.Elevators[0].ScanDirection = DirectionUp
+	system.Elevators[0].Stops = []StopPlan{
+		{Floor: 5, Reason: StopReasonHallUp, Direction: DirectionUp, RequestIDs: []int64{90}},
+		{Floor: 7, Reason: StopReasonHallUp, Direction: DirectionUp, RequestIDs: []int64{91}},
+	}
+	system.Elevators[1].CurrentFloor = 1
+	system.Elevators[1].ScanDirection = DirectionUp
+	request := addSCANTestRequest(system, 6, DirectionUp, RequestKindHall)
+
+	if !system.scheduler.Assign(system) {
+		t.Fatal("Assign returned false, want true")
+	}
+
+	if request.AssignedElevatorID != 2 {
+		t.Fatalf("assigned elevator ID = %d, want 2", request.AssignedElevatorID)
+	}
+}
+
 func newSCANTestSystem(t *testing.T, elevatorCount int) *System {
 	t.Helper()
 

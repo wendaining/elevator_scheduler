@@ -3269,3 +3269,90 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
 ```
 
 两者均已通过。
+
+## 2026-05-12：让 SCAN 调度复用 cost 函数
+
+这次重构 `internal/elevator/SCANScheduler.go`，让 SCAN 不再自己手写“距离最近 / 优先级”排序，而是复用之前预留的 cost 基础设施：
+
+```text
+EstimateAssignmentScore
+AssignmentCandidate
+```
+
+### 候选电梯范围
+
+SCAN 的候选现在包括：
+
+```text
+空闲电梯
+正在运行但可以顺路追加该请求的电梯
+```
+
+仍然排除：
+
+```text
+EmergencyStop 电梯
+正在运行但请求不顺路的电梯
+```
+
+这里保留“忙碌电梯必须顺路”的硬约束，是为了不破坏 SCAN 的核心方向语义。候选内部再交给 cost 排序。
+
+### cost 在 SCAN 中发挥的作用
+
+每个候选都会调用：
+
+```go
+EstimateAssignmentScore(s, scoreElevator, *request)
+```
+
+它会综合：
+
+```text
+DistanceCost
+  请求楼层离电梯当前位置越远，成本越高。
+
+TurnPenalty
+  如果电梯当前方向和请求楼层不一致，成本增加。
+
+StopPenalty
+  已有停靠越多，成本越高，避免把任务都压给同一部电梯。
+
+WaitCompensation
+  请求等待越久，总成本越低，减少饥饿风险。
+```
+
+对已有 `Stops` 但 `Direction == idle` 的测试/边界状态，SCAN 会用 `ScanDirection` 作为 cost 的运行方向：
+
+```go
+if e.Direction == DirectionIdle && len(e.Stops) > 0 {
+	e.Direction = e.ScanDirection
+}
+```
+
+这样 cost 的 TurnPenalty 能正确理解这部电梯的扫描方向。
+
+### 新增测试
+
+在 `internal/elevator/SCANScheduler_test.go` 里补充：
+
+```text
+TestSCANSchedulerUsesCostStopPenalty
+```
+
+这个测试构造：
+
+```text
+一部顺路但已有多个 stop 的电梯
+一部距离稍远但空闲的电梯
+```
+
+期望 SCAN 选择空闲电梯，说明 `StopPenalty` 确实参与了 SCAN 选择。
+
+### 验证
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+两者均已通过。
