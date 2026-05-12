@@ -319,6 +319,12 @@ func validateCreateRequestPayload(payload createRequestPayload, floorCount int, 
 	if payload.Kind == elevator.RequestKindHall && payload.Direction == elevator.DirectionIdle {
 		return errors.New("hall request direction must be up or down")
 	}
+	if payload.Kind == elevator.RequestKindHall && payload.Floor == 1 && payload.Direction == elevator.DirectionDown {
+		return errors.New("hall request from floor 1 cannot go down")
+	}
+	if payload.Kind == elevator.RequestKindHall && payload.Floor == floorCount && payload.Direction == elevator.DirectionUp {
+		return fmt.Errorf("hall request from floor %d cannot go up", floorCount)
+	}
 	if payload.Kind == elevator.RequestKindCabin && payload.Direction != elevator.DirectionIdle {
 		return errors.New("cabin request direction must be idle")
 	}

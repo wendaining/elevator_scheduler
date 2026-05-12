@@ -33,5 +33,6 @@ cmd/server/             程序入口
 internal/elevator/      电梯核心逻辑（模型、调度接口、多种调度算法、SQLite 请求持久化）
 internal/api/           HTTP API handler（路由注册、自动步进）
 web/                    前端页面（Vue 3 + Element Plus）
+scripts/                脚本工具（用户操作模拟测试等）
 docs/                   学习记录
 ```
