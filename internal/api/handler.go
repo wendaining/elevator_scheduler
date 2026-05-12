@@ -53,12 +53,6 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
 		return fmt.Errorf("elevator count must be between 1 and 10, got %d", elevatorCount)
 	}
 
-	// 停止当前 auto-step goroutine
-	if s.autoStepCancel != nil {
-		s.autoStepCancel()
-		s.autoStepCancel = nil
-	}
-
 	// 用新参数重建 System
 	newConfig := s.config
 	newConfig.Floors = floorCount
@@ -68,19 +62,27 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
 		return err
 	}
 
-	// 为新 System 启动电梯 goroutine
-	newSystem.StartElevatorRunners(s.baseCtx)
+	// 为新 System 启动电梯 goroutine。
+	// 如果 baseCtx 尚未被 StartAutoStep 设置（例如测试路径），用 Background 兜底。
+	runnerCtx := s.baseCtx
+	if runnerCtx == nil {
+		runnerCtx = context.Background()
+	}
+	newSystem.StartElevatorRunners(runnerCtx)
 
-	// 替换旧的 System
+	// 新系统已就绪，停止旧 auto-step 并替换
+	if s.autoStepCancel != nil {
+		s.autoStepCancel()
+		s.autoStepCancel = nil
+	}
+
 	oldSystem := s.System
 	s.System = newSystem
 
-	// 释放旧系统资源
 	if oldSystem != nil {
 		oldSystem.Close()
 	}
 
-	// 重新启动 auto-step
 	if s.autoStepStarted {
 		s.startAutoStepLocked()
 	}
