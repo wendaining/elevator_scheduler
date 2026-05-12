@@ -284,3 +284,92 @@ function onSelect(id) {
 - **方向箭头**：移动时轿厢内显示 ▲ 或 ▼，空闲/开门时隐藏
 - **角标**：灰色圆形数字，位于轿厢右上角，显示剩余停靠计划数
 - **wrapper 层**：`car-wrapper` 负责定位，`elevator-car` 负责外观，职责分离
+
+## 2026-05-12：把轿厢动画改为当前楼层格子高亮
+
+本次是对第 4 步视觉方案的重构。
+
+原来的 `ElevatorShaft.vue` 使用两层结构：
+
+```text
+floor-block      楼层格子和按钮
+car-wrapper      绝对定位的电梯轿厢
+elevator-car     轿厢本体和颜色
+```
+
+轿厢位置通过 `currentFloor`、`moveRemainingTicks` 和 `ticksPerFloor` 计算百分比 `top`。这个设计理论上能表达 tick 内移动进度，但实际页面中会显得电梯在格子之间一点一点挪动，视觉上不够干净。
+
+### 新方案
+
+删除单独的轿厢方块，不再计算轿厢 `top`。
+
+现在电梯位置直接由当前楼层格子表达：
+
+```js
+function isCurrentFloor(floor) {
+  return floor === props.elevator.currentFloor
+}
+
+function floorStateClass(floor) {
+  const e = props.elevator
+  if (floor !== e.currentFloor) return ''
+  if (e.doorOpen) return 'is-current state-open'
+  if (e.direction !== 'idle') return 'is-current state-moving'
+  return 'is-current state-idle'
+}
+```
+
+也就是说：
+
+```text
+currentFloor 在哪一层，哪一层的方块就高亮。
+```
+
+### 状态颜色
+
+| 状态 | 条件 | 显示 |
+|------|------|------|
+| 空闲 | `direction === "idle"` | 当前楼层格子绿色 |
+| 移动 | `direction !== "idle" && !doorOpen` | 当前楼层格子黄色 |
+| 开门 | `doorOpen === true` | 当前楼层格子红色 |
+
+移动时，当前楼层格子内仍然显示 ▲ 或 ▼。如果电梯还有停靠计划，右上角继续显示 `stops.length` 角标。
+
+### 响应式高度
+
+旧方案需要：
+
+```text
+trackRef.clientHeight / floorCount
+window resize 时重新计算
+```
+
+新方案改成 CSS Grid：
+
+```js
+const trackStyle = computed(() => {
+  return {
+    gridTemplateRows: `repeat(${props.floorCount}, minmax(0, 1fr))`,
+  }
+})
+```
+
+这样每个楼层格子的高度由浏览器自动平均分配，不再需要手动读取 DOM，也不需要监听 `resize`。
+
+### 改动文件
+
+```text
+web/src/components/ElevatorShaft.vue
+web/src/components/BuildingView.vue
+docs/frontend-plan.md
+docs/frontend-design.md
+docs/frontend-record.md
+```
+
+### 验证
+
+```bash
+npm run build
+```
+
+构建已通过。

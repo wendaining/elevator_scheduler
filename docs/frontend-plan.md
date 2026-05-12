@@ -51,22 +51,24 @@
 - [x] 创建 `BuildingView.vue`（整体大楼可视化）：
   - 水平排列 k 台 `ElevatorShaft`，k = elevatorCount
   - 使用 CSS Flexbox，响应式均分宽度
-- [x] 电梯在方块间的位置用绝对定位表示：
-  - 根据 `elevator.currentFloor` 和 `floorCount` 计算出 Y 位置
-  - 楼层 1 在最下方；含 tick 间平滑偏移（MoveRemainingTicks）
+- [x] 电梯位置直接由当前楼层方块高亮表示：
+  - 不再渲染额外的绝对定位轿厢方块
+  - 根据 `elevator.currentFloor` 给对应楼层格子添加状态颜色
+  - 楼层 1 在最下方；视觉上不再使用 `MoveRemainingTicks` 做中间插值
 - [x] **验证**：页面能看到电梯方块，点击楼层按钮能触发 API
 
-### 第 4 步：电梯移动和颜色
+### 第 4 步：电梯位置和颜色
 
-- [x] 在 `ElevatorShaft.vue` 中渲染一台电梯轿厢方块：
-  - `rgba` 半透明 + `box-shadow` 柔光效果，`transition` 同时作用于位置和颜色变化
+- [x] 在 `ElevatorShaft.vue` 中用当前楼层格子表示电梯位置：
+  - 取消额外的电梯轿厢方块组件，不再做 `top` 平滑移动
+  - 当前楼层方块直接变色，视觉更稳定
   - 颜色逻辑：
-    - `doorOpen === true` → 红色半透明 + 红色光晕（开门等待）
-    - `doorOpen === false && direction !== "idle"` → 黄色半透明 + 暖色光晕（移动中）
-    - `direction === "idle"` → 绿色半透明 + 绿色光晕（空闲待命）
-  - 移动时轿厢内显示 ▲/▼ 方向箭头
+    - `doorOpen === true` → 当前楼层格子红色（开门等待）
+    - `doorOpen === false && direction !== "idle"` → 当前楼层格子黄色（移动中）
+    - `direction === "idle"` → 当前楼层格子绿色（空闲待命）
+  - 移动时当前楼层格子内显示 ▲/▼ 方向箭头
   - 右上角灰色圆形角标显示 `stops` 数量
-- [x] **验证**：提交请求后，能看到电梯变成黄色移动，到目标层后变红开门
+- [x] **验证**：提交请求后，当前楼层格子按状态变黄/红/绿，不再出现轿厢滑动卡顿
 
 ### 第 5 步：右侧配置面板
 
@@ -90,10 +92,10 @@
 
 ### 第 6 步：响应式布局和细节
 
-- [ ] 电梯方块大小根据楼层数动态计算：`方块高度 = (可视区域高度 - 预留空间) / floorCount`
-- [ ] 窗口 resize 时重新计算
+- [x] 电梯方块大小根据楼层数自适应：`grid-template-rows: repeat(floorCount, minmax(0, 1fr))`
+- [x] 窗口 resize 时由 CSS Grid 自动重新分配高度，不再手动读取 DOM 高度
 - [ ] Element Plus 主题色自定义为黑灰色系
-- [ ] 添加微动效：电梯移动时的 CSS transition
+- [x] 添加微动效：当前楼层格子的背景色、边框和阴影 transition
 - [ ] **验证**：调整浏览器窗口大小，布局不乱；调节楼层数，电梯方块自适应
 
 ### 第 7 步：在 main.go 中配置静态文件路径
@@ -107,7 +109,7 @@
 |------|------|
 | 状态管理 | 直接用 Vue reactive + provide/inject，不引入 Pinia（项目规模小） |
 | 轮询频率 | 500ms，与后端 tick 间隔一致，不丢帧不浪费 |
-| 电梯移动动画 | CSS `transition: top 0.3s ease`，根据 floor 变化自动过渡 |
+| 电梯位置显示 | 不渲染额外轿厢方块；用 `currentFloor` 对应楼层格子高亮表示位置 |
 | Vite dev proxy | 开发时 `vite.config.js` 配置 proxy 到 `localhost:8080`，避免 CORS |
 | 删除旧文件 | index.html、app.js、style.css 全部删除 |
 

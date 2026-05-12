@@ -18,7 +18,6 @@
       :key="elevator.id"
       :elevator="elevator"
       :floor-count="state.floorCount"
-      :ticks-per-floor="state.ticksPerFloor"
       :is-selected="selectedElevatorId === elevator.id"
       @select="onSelect(elevator.id)"
       @hall-request="onHallRequest"
