@@ -8,6 +8,7 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| GET | `/api/config` | 获取前端轮询所需的后端运行配置，例如 `autoStepIntervalMs` |
 | GET | `/api/state` | 全量系统状态，JSON 返回 |
 | POST | `/api/request` | 创建请求 `{floor, direction, kind}` |
 | POST | `/api/scheduler` | 切换调度算法 `{name}` |
@@ -32,12 +33,13 @@
 ### 第 2 步：建立 API 通信层
 
 - [x] 创建 `src/api.js`，封装所有后端 API 调用：
-  - `fetchState()` → `GET /api/state`（轮询用，每 500ms 调一次，与后端 tick 间隔一致）
+  - `fetchConfig()` → `GET /api/config`（读取 `autoStepIntervalMs`，避免前端硬编码轮询间隔）
+  - `fetchState()` → `GET /api/state`（轮询用，间隔由 `fetchConfig()` 返回值决定）
   - `createRequest(floor, direction, kind)` → `POST /api/request`
   - `setScheduler(name)` → `POST /api/scheduler`
   - `setFloorCount(n)` → `POST /api/floor-count`
   - `setElevatorCount(n)` → `POST /api/elevator-count`
-- [x] 在 `App.vue` 的 `onMounted` 中开始轮询 `fetchState`，用 `setInterval`
+- [x] 在 `App.vue` 的 `onMounted` 中先读取 `fetchConfig()`，再按后端返回的 `autoStepIntervalMs` 轮询 `fetchState`
 - [x] 整个应用的状态由 `fetchState` 的返回值驱动，通过 Vue 的 `provide` 向下传递
 - [x] **验证**：浏览器 Console 能看到 state JSON
 
@@ -108,7 +110,7 @@
 | 问题 | 方案 |
 |------|------|
 | 状态管理 | 直接用 Vue reactive + provide/inject，不引入 Pinia（项目规模小） |
-| 轮询频率 | 500ms，与后端 tick 间隔一致，不丢帧不浪费 |
+| 轮询频率 | 前端读取 `GET /api/config` 的 `autoStepIntervalMs`，与后端 tick 间隔保持一致 |
 | 电梯位置显示 | 不渲染额外轿厢方块；用 `currentFloor` 对应楼层格子高亮表示位置 |
 | Vite dev proxy | 开发时 `vite.config.js` 配置 proxy 到 `localhost:8080`，避免 CORS |
 | 删除旧文件 | index.html、app.js、style.css 全部删除 |

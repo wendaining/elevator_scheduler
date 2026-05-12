@@ -8,6 +8,18 @@
 const BASE = '/api'
 
 /**
+ * 获取前端运行所需的后端配置。
+ * autoStepIntervalMs 是后端自动 Step 的间隔，前端轮询应使用同一个值。
+ */
+export async function fetchConfig() {
+  const response = await fetch(`${BASE}/config`)
+  if (!response.ok) {
+    throw new Error(`GET /api/config failed: ${response.status}`)
+  }
+  return response.json()
+}
+
+/**
  * 获取电梯系统当前全量状态。
  * 返回的 JSON 结构见 model.go 的 json tag。
  */

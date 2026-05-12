@@ -373,3 +373,105 @@ npm run build
 ```
 
 构建已通过。
+
+## 2026-05-12：前端轮询间隔改为读取后端配置
+
+本次目标：整体模拟节奏加快一倍，并避免前后端分别维护 tick 间隔。
+
+### 问题
+
+之前前端写死：
+
+```js
+timer = setInterval(tick, 500)
+```
+
+后端也有自己的自动推进间隔：
+
+```go
+defaultAutoStepInterval = 500 * time.Millisecond
+```
+
+如果以后只改了后端，例如改成 `250ms`，但忘记改前端，前端就会每 500ms 才拉一次状态，漏掉一半 tick。页面仍然能工作，但视觉反馈会滞后。
+
+### 新方案
+
+后端新增：
+
+```text
+GET /api/config
+```
+
+返回示例：
+
+```json
+{
+  "autoStepIntervalMs": 250,
+  "ticksPerFloor": 5,
+  "doorBaseTicks": 2,
+  "tickPerPassenger": 1
+}
+```
+
+前端新增 `fetchConfig()`：
+
+```js
+export async function fetchConfig() {
+  const response = await fetch(`${BASE}/config`)
+  if (!response.ok) {
+    throw new Error(`GET /api/config failed: ${response.status}`)
+  }
+  return response.json()
+}
+```
+
+`App.vue` 启动时先读取配置，再启动轮询：
+
+```js
+async function startPolling() {
+  config.value = await fetchConfig()
+  await tick()
+
+  const interval = config.value.autoStepIntervalMs
+  timer = setInterval(tick, interval)
+}
+```
+
+这样以后要修改整体系统节奏，只需要改后端 `defaultAutoStepInterval`。
+
+### 本次速度调整
+
+后端默认值从：
+
+```go
+defaultAutoStepInterval = 500 * time.Millisecond
+```
+
+改为：
+
+```go
+defaultAutoStepInterval = 250 * time.Millisecond
+```
+
+这表示整个模拟系统节奏加快一倍。移动、开门等待、tick 数增长都会一起变快。
+
+### 改动文件
+
+```text
+cmd/server/main.go
+internal/api/handler.go
+internal/api/handler_test.go
+web/src/api.js
+web/src/App.vue
+docs/frontend-plan.md
+docs/frontend-record.md
+```
+
+### 验证
+
+```bash
+go test ./...
+npm run build
+```
+
+两者均已通过。

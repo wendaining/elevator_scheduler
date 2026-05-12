@@ -18,12 +18,13 @@
 
 <script setup>
 import { ref, provide, onMounted, onUnmounted } from 'vue'
-import { fetchState } from './api.js'
+import { fetchConfig, fetchState } from './api.js'
 import BuildingView from './components/BuildingView.vue'
 
 const state = ref(null)
 const selectedElevatorId = ref(null)
 const error = ref(null)
+const config = ref(null)
 let timer = null
 
 function onSelectedChange(id) {
@@ -31,8 +32,7 @@ function onSelectedChange(id) {
 }
 
 onMounted(() => {
-  tick()
-  timer = setInterval(tick, 500)
+  startPolling()
 })
 
 onUnmounted(() => {
@@ -41,6 +41,21 @@ onUnmounted(() => {
     timer = null
   }
 })
+
+async function startPolling() {
+  try {
+    config.value = await fetchConfig()
+    await tick()
+
+    const interval = config.value.autoStepIntervalMs
+    if (!Number.isFinite(interval) || interval <= 0) {
+      throw new Error(`invalid autoStepIntervalMs from backend: ${interval}`)
+    }
+    timer = setInterval(tick, interval)
+  } catch (err) {
+    error.value = err.message
+  }
+}
 
 async function tick() {
   try {
@@ -53,6 +68,7 @@ async function tick() {
 
 provide('state', state)
 provide('selectedElevatorId', selectedElevatorId)
+provide('config', config)
 </script>
 
 <style>
