@@ -30,11 +30,6 @@ func NewSystem(sc SystemConfig) (*System, error) {
 	if err != nil {
 		return nil, err
 	}
-	maxCompletedRequestID, err := requestStore.MaxCompletedRequestID()
-	if err != nil {
-		requestStore.Close()
-		return nil, err
-	}
 
 	elevators := make([]Elevator, sc.ElevatorCount)
 	for i := range elevators {
@@ -64,7 +59,7 @@ func NewSystem(sc SystemConfig) (*System, error) {
 		SchedulerName:    scheduler.Name(),
 		scheduler:        scheduler,
 		requestStore:     requestStore,
-		nextRequestID:    maxCompletedRequestID + 1,
+		nextRequestID:    1,
 	}, nil
 }
 

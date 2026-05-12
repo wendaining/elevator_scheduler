@@ -54,10 +54,11 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
 		return fmt.Errorf("elevator count must be between 1 and 10, got %d", elevatorCount)
 	}
 
-	// 用新参数重建 System
+	// 用新参数重建 System，每次重启写入新的数据库文件
 	newConfig := s.config
 	newConfig.Floors = floorCount
 	newConfig.ElevatorCount = elevatorCount
+	newConfig.DatabasePath = fmt.Sprintf("data/requests_%d.db", time.Now().Unix())
 	newSystem, err := elevator.NewSystem(newConfig)
 	if err != nil {
 		return err
@@ -93,7 +94,7 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
 
 // handleConfig 返回前端轮询和展示需要的运行配置。
 //
-// 前端不要硬编码轮询间隔，而是读取 autoStepIntervalMs。
+// 前端不硬编码轮询间隔，而是读取 autoStepIntervalMs。
 // 这样后续只改后端默认节奏，页面刷新频率会自动保持同步。
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

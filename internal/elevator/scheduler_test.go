@@ -62,6 +62,9 @@ func TestFCFSSchedulerSkipsBusyAndEmergencyElevators(t *testing.T) {
 
 func TestFirstAvailableSchedulerLeavesRequestPendingWhenFirstElevatorBusy(t *testing.T) {
 	system := newSchedulerTestSystem(t, 2)
+	if err := system.SetScheduler("first-available"); err != nil {
+		t.Fatalf("SetScheduler returned error: %v", err)
+	}
 
 	system.Elevators[0].Stops = []StopPlan{
 		{Floor: 8, Reason: StopReasonCabin, Direction: DirectionIdle, RequestIDs: []int64{99}},

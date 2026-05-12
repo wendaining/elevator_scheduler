@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os_sp26_proj1/internal/api"
@@ -16,9 +17,10 @@ func main() {
 		defaultTicksPerFloor    = 5
 		defaultDoorBaseTicks    = 2
 		defaultTickPerPassenger = 1
-		defaultDatabasePath     = "data/requests.db"
 		defaultAutoStepInterval = 250 * time.Millisecond
 	)
+
+	dbPath := fmt.Sprintf("data/requests_%d.db", time.Now().Unix())
 
 	config := elevator.SystemConfig{
 		Floors:           defaultFloorCount,
@@ -26,7 +28,7 @@ func main() {
 		TicksPerFloor:    defaultTicksPerFloor,
 		DoorBaseTicks:    defaultDoorBaseTicks,
 		TickPerPassenger: defaultTickPerPassenger,
-		DatabasePath:     defaultDatabasePath,
+		DatabasePath:     dbPath,
 	}
 
 	system, err := elevator.NewSystem(config)

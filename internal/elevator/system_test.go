@@ -267,34 +267,28 @@ func TestNewSystemStoresTimingParameters(t *testing.T) {
 	}
 }
 
-func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
-	databasePath := filepath.Join(t.TempDir(), "requests.db")
-
+func TestNewSystemRequestIDAlwaysStartsFromOne(t *testing.T) {
+	// 每次创建新 System（无论数据库文件是否存在），request ID 都从 1 开始。
 	firstSystem, err := NewSystem(SystemConfig{
 		Floors:           20,
 		ElevatorCount:    5,
 		TicksPerFloor:    1,
 		DoorBaseTicks:    2,
 		TickPerPassenger: 1,
-		DatabasePath:     databasePath,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
-		t.Fatalf("NewSystemWithDatabase returned error: %v", err)
+		t.Fatalf("NewSystem returned error: %v", err)
 	}
-	startElevatorRunnersForTest(t, firstSystem)
-	request, err := firstSystem.AddRequest(2, DirectionUp, RequestKindHall, 0)
+
+	req1, err := firstSystem.AddRequest(2, DirectionUp, RequestKindHall, 0)
 	if err != nil {
-		t.Fatalf("AddRequest returned error: %v", err)
+		t.Fatalf("first AddRequest returned error: %v", err)
 	}
-	if err := firstSystem.Step(); err != nil {
-		t.Fatalf("first Step returned error: %v", err)
+	if req1.ID != 1 {
+		t.Fatalf("first request ID = %d, want 1", req1.ID)
 	}
-	if err := firstSystem.Step(); err != nil {
-		t.Fatalf("second Step returned error: %v", err)
-	}
-	if err := firstSystem.Close(); err != nil {
-		t.Fatalf("Close returned error: %v", err)
-	}
+	firstSystem.Close()
 
 	secondSystem, err := NewSystem(SystemConfig{
 		Floors:           20,
@@ -302,19 +296,19 @@ func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 		TicksPerFloor:    1,
 		DoorBaseTicks:    2,
 		TickPerPassenger: 1,
-		DatabasePath:     databasePath,
+		DatabasePath:     filepath.Join(t.TempDir(), "another.db"),
 	})
 	if err != nil {
-		t.Fatalf("second NewSystemWithDatabase returned error: %v", err)
+		t.Fatalf("second NewSystem returned error: %v", err)
 	}
 	defer secondSystem.Close()
 
-	nextRequest, err := secondSystem.AddRequest(3, DirectionUp, RequestKindHall, 0)
+	req2, err := secondSystem.AddRequest(3, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("second AddRequest returned error: %v", err)
 	}
-	if nextRequest.ID != request.ID+1 {
-		t.Fatalf("next request ID = %d, want %d", nextRequest.ID, request.ID+1)
+	if req2.ID != 1 {
+		t.Fatalf("second system first request ID = %d, want 1", req2.ID)
 	}
 }
 

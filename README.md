@@ -4,6 +4,10 @@
 
 实现一个电梯调度系统，支持多种调度算法（FCFS、SCAN、LOOK、First Available、Nearest Idle），并提供 Web 前端可视化展示电梯运行状态。
 
+## 开发环境
+
+WSL2 Ubuntu
+
 ## 技术栈
 
 - 后端：Go（标准库 `net/http`）
@@ -29,6 +33,5 @@ cmd/server/             程序入口
 internal/elevator/      电梯核心逻辑（模型、调度接口、多种调度算法、SQLite 请求持久化）
 internal/api/           HTTP API handler（路由注册、自动步进）
 web/                    前端页面（Vue 3 + Element Plus）
-web/dist/               前端构建产物
 docs/                   学习记录
 ```

@@ -99,27 +99,6 @@ func (s *RequestStore) CompletedRequestCount() (int, error) {
 	return count, nil
 }
 
-// MaxCompletedRequestID 返回数据库中已经保存过的最大请求 ID。
-// 系统启动时用它恢复 nextRequestID，避免重启后从 1 重新编号。
-func (s *RequestStore) MaxCompletedRequestID() (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, fmt.Errorf("request store is not initialized")
-	}
-
-	var maxID sql.NullInt64
-	//sql.NullInt64 可以表达两种状态：
-	// Valid == true 时，Int64 字段包含有效值；
-	// Valid == false 时，表示数据库中的值是 NULL，此时 Int64 字段的值应该被忽略。
-	err := s.db.QueryRow(`SELECT MAX(id) FROM completed_requests`).Scan(&maxID)
-	if err != nil {
-		return 0, fmt.Errorf("read max completed request id: %w", err)
-	}
-	if !maxID.Valid {
-		return 0, nil
-	}
-	return maxID.Int64, nil
-}
-
 // CompletedRequestByID 按请求 ID 读取一条已完成请求记录，主要用于测试。
 func (s *RequestStore) CompletedRequestByID(requestID int64) (*Request, error) {
 	if s == nil || s.db == nil {
