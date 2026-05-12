@@ -211,6 +211,45 @@ func TestStartAutoStepAdvancesSystemTick(t *testing.T) {
 	}
 }
 
+func TestHandleConfigReturnsAutoStepInterval(t *testing.T) {
+	server := newTestServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server.StartAutoStep(ctx, 250*time.Millisecond)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+
+	server.handleConfig(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", response.Code, http.StatusOK, response.Body.String())
+	}
+
+	var body struct {
+		AutoStepIntervalMs int64 `json:"autoStepIntervalMs"`
+		TicksPerFloor      int   `json:"ticksPerFloor"`
+		DoorBaseTicks      int   `json:"doorBaseTicks"`
+		TickPerPassenger   int   `json:"tickPerPassenger"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("Decode response returned error: %v", err)
+	}
+
+	if body.AutoStepIntervalMs != 250 {
+		t.Fatalf("auto step interval ms = %d, want 250", body.AutoStepIntervalMs)
+	}
+	if body.TicksPerFloor != 1 {
+		t.Fatalf("ticks per floor = %d, want 1", body.TicksPerFloor)
+	}
+	if body.DoorBaseTicks != 2 {
+		t.Fatalf("door base ticks = %d, want 2", body.DoorBaseTicks)
+	}
+	if body.TickPerPassenger != 1 {
+		t.Fatalf("tick per passenger = %d, want 1", body.TickPerPassenger)
+	}
+}
+
 func TestHandleSchedulerSwitchesScheduler(t *testing.T) {
 	server := newTestServer(t)
 

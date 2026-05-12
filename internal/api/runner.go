@@ -10,10 +10,11 @@ import (
 // 系统重启时内部会重新启动 auto-step，调用方不需要再次调用本方法。
 func (s *Server) StartAutoStep(ctx context.Context, interval time.Duration) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.baseCtx = ctx
 	s.autoStepInterval = interval
 	s.autoStepStarted = true
-	s.mu.Unlock()
 	s.startAutoStepLocked()
 }
 

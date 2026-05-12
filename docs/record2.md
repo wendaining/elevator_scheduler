@@ -3540,3 +3540,59 @@ go test -race ./...
 ```
 
 三者均已通过。
+
+## 2026-05-12：新增前端运行配置 API，并把系统节奏加快一倍
+
+这次新增了：
+
+```text
+GET /api/config
+```
+
+它用于把后端的运行节奏暴露给前端，避免前端硬编码轮询间隔。
+
+返回字段包括：
+
+```text
+autoStepIntervalMs
+  后端自动 Step 的间隔，单位毫秒。
+
+ticksPerFloor
+  电梯移动一层需要几个 tick。
+
+doorBaseTicks
+  开门等待的基础 tick 数。
+
+tickPerPassenger
+  每个乘客额外增加的开门等待 tick 数。
+```
+
+本次同时把后端默认自动推进间隔从：
+
+```go
+defaultAutoStepInterval = 500 * time.Millisecond
+```
+
+改成：
+
+```go
+defaultAutoStepInterval = 250 * time.Millisecond
+```
+
+这表示整个系统 tick 节奏加快一倍。因为前端现在会读取 `/api/config`，所以以后如果继续调整后端 tick 间隔，不需要再同步修改前端的 `setInterval`。
+
+### 验证
+
+新增测试：
+
+```text
+TestHandleConfigReturnsAutoStepInterval
+```
+
+验证命令：
+
+```bash
+go test ./...
+```
+
+已通过。

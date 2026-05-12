@@ -17,7 +17,7 @@ func main() {
 		defaultDoorBaseTicks    = 2
 		defaultTickPerPassenger = 1
 		defaultDatabasePath     = "data/requests.db"
-		defaultAutoStepInterval = 500 * time.Millisecond
+		defaultAutoStepInterval = 250 * time.Millisecond
 	)
 
 	config := elevator.SystemConfig{

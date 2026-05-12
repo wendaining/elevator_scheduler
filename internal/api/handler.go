@@ -16,12 +16,12 @@ import (
 type Server struct {
 	System *elevator.System
 
-	mu              sync.Mutex
-	config          elevator.SystemConfig
-	baseCtx         context.Context
-	autoStepCancel  context.CancelFunc
+	mu               sync.Mutex
+	config           elevator.SystemConfig
+	baseCtx          context.Context
+	autoStepCancel   context.CancelFunc
 	autoStepInterval time.Duration
-	autoStepStarted bool
+	autoStepStarted  bool
 }
 
 // NewServer 创建 API server，并保存重建系统所需的配置。
@@ -35,6 +35,7 @@ func NewServer(system *elevator.System, config elevator.SystemConfig) *Server {
 // RegisterRoutes 把所有 API 路由注册到 mux 上。
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/request", s.handleRequest)
 	mux.HandleFunc("/api/scheduler", s.handleScheduler)
@@ -88,6 +89,31 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
 	}
 
 	return nil
+}
+
+// handleConfig 返回前端轮询和展示需要的运行配置。
+//
+// 前端不要硬编码轮询间隔，而是读取 autoStepIntervalMs。
+// 这样后续只改后端默认节奏，页面刷新频率会自动保持同步。
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	s.mu.Lock()
+	response := map[string]any{
+		"autoStepIntervalMs": s.autoStepInterval.Milliseconds(),
+		"ticksPerFloor":      s.config.TicksPerFloor,
+		"doorBaseTicks":      s.config.DoorBaseTicks,
+		"tickPerPassenger":   s.config.TickPerPassenger,
+	}
+	s.mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
