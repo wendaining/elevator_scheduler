@@ -16,7 +16,7 @@
 # 启动后端
 go run ./cmd/server
 
-# 前端开发（可选，web/dist 已包含构建产物）
+# 前端开发
 cd web && npm install && npm run dev
 ```
 
