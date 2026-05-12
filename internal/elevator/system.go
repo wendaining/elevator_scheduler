@@ -128,7 +128,7 @@ func (s *System) SetScheduler(name string) error {
 	return nil
 }
 
-// Close 释放 System 持有的外部资源，例如 SQLite 数据库连接。
+// Close 停止所有后台 goroutine 并释放外部资源。
 func (s *System) Close() error {
 	if s == nil {
 		return nil
@@ -136,6 +136,11 @@ func (s *System) Close() error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.runnerCancel != nil {
+		s.runnerCancel()
+		s.runnerCancel = nil
+	}
 
 	return s.requestStore.Close()
 }

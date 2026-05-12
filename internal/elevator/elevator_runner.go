@@ -31,6 +31,7 @@ func (s *System) StartElevatorRunners(ctx context.Context) {
 		return
 	}
 
+	runnerCtx, runnerCancel := context.WithCancel(ctx)
 	commands := make([]chan elevatorTickCommand, len(s.Elevators))
 	for i := range commands {
 		commands[i] = make(chan elevatorTickCommand, 1)
@@ -39,15 +40,16 @@ func (s *System) StartElevatorRunners(ctx context.Context) {
 	s.elevatorCommands = commands
 	s.elevatorRunnersDone = done
 	s.elevatorRunnersStarted = true
+	s.runnerCancel = runnerCancel
 	s.mu.Unlock()
 
 	go func() {
-		<-ctx.Done()
+		<-runnerCtx.Done()
 		close(done)
 	}()
 
 	for elevatorIndex, commandChannel := range commands {
-		go s.runElevator(ctx, elevatorIndex, commandChannel)
+		go s.runElevator(runnerCtx, elevatorIndex, commandChannel)
 	}
 }
 

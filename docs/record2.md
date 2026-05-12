@@ -3457,3 +3457,86 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
 ```
 
 两者均已通过。
+
+## 2026-05-12：重构配置变更为系统级重启
+
+上一版的 `POST /api/floor-count` 和 `POST /api/elevator-count` 试图在运行时微调 System 的字段，导致 goroutine 生命周期管理逻辑（`runnerCtx`、`runnerCancel`、`stopElevatorRunners`、`restartElevatorRunners`）渗入了 `model.go` 和 `elevator_runner.go`。
+
+这次重构用一个更简单的方案替代：**改配置 = 重建整个 System 对象**。
+
+### 核心思路
+
+```text
+旧方案：修改 System 内部字段 → 停止 goroutine → 重建 channel → 重启 goroutine
+新方案：用新参数 NewSystem() → 启动新 goroutine → 替换指针 → 关闭旧 System
+```
+
+好处：
+
+```text
+1. System 层完全不需要知道"配置可以在运行时被修改"
+2. model.go 的 runnerCtx / runnerCancel 删除，context import 删除
+3. elevator_runner.go 的 stopElevatorRunners / restartElevatorRunners 删除
+4. system.go 的 SetFloorCount / SetElevatorCount 删除
+5. 所有重启逻辑集中在 api.Server.RestartSystem() 一个方法里
+```
+
+### 代码改动
+
+**model.go：**
+- 删除 `runnerCtx context.Context` 和 `runnerCancel context.CancelFunc` 字段
+- 删除 `context` import
+
+**elevator_runner.go：**
+- `StartElevatorRunners` 还原为直接使用传入的 context，不再内部派生和存储
+- 删除 `stopElevatorRunners()` 和 `restartElevatorRunners()`
+
+**system.go：**
+- 删除 `SetFloorCount()` 和 `SetElevatorCount()` 两个方法
+
+**handler.go（合并原 runner.go）：**
+- `Server` 新增字段：`mu`、`config`、`baseCtx`、`autoStepCancel`、`autoStepInterval`、`autoStepStarted`
+- `NewServer` 签名改为 `NewServer(system, config)`，保存重建系统所需的配置
+- 新增 `RestartSystem(floorCount, elevatorCount int) error`：
+  1. 校验范围
+  2. 取消当前 auto-step goroutine
+  3. 用新参数调用 `elevator.NewSystem()`
+  4. 为新 System 启动 elevator runners
+  5. 原子替换 `s.System` 指针
+  6. 关闭旧 System（释放 DB 连接）
+  7. 重新启动 auto-step goroutine
+- `StartAutoStep` 现在存储 `baseCtx` 和 `interval` 以备重启使用
+- 新增 `startAutoStepLocked()` 内部方法，auto-step goroutine 每次 tick 通过 `s.mu` 读取当前 System 指针
+- `handleFloorCount` / `handleElevatorCount` 改为读取另一个参数的当前值，然后调用 `RestartSystem`
+- 所有 handler 通过 `s.mu` 保护对 `s.System` 的访问
+
+**main.go：**
+- 将 `SystemConfig` 提取为变量，传给 `NewServer`
+
+**runner.go：**
+- 删除，内容已并入 handler.go
+
+### auto-step goroutine 的处理
+
+auto-step goroutine 内部会通过 `s.mu` 读取最新的 `s.System` 指针：
+
+```go
+s.mu.Lock()
+sys := s.System
+s.mu.Unlock()
+sys.Step()
+```
+
+这样当 `RestartSystem` 替换 `s.System` 后，下一次 tick 自动使用新系统，不需要外部协调。
+
+`RestartSystem` 在替换前先取消旧的 auto-step context，确保旧 goroutine 退出，再启动新的。
+
+### 验证
+
+```bash
+go build ./...
+go test ./...
+go test -race ./...
+```
+
+三者均已通过。

@@ -20,25 +20,25 @@ func main() {
 		defaultAutoStepInterval = 500 * time.Millisecond
 	)
 
-	system, err := elevator.NewSystem(elevator.SystemConfig{
+	config := elevator.SystemConfig{
 		Floors:           defaultFloorCount,
 		ElevatorCount:    defaultElevatorCount,
 		TicksPerFloor:    defaultTicksPerFloor,
 		DoorBaseTicks:    defaultDoorBaseTicks,
 		TickPerPassenger: defaultTickPerPassenger,
 		DatabasePath:     defaultDatabasePath,
-	})
+	}
+
+	system, err := elevator.NewSystem(config)
 	if err != nil {
 		log.Fatalf("failed to create elevator system: %v", err)
 	}
 	defer system.Close()
 
-	server := api.NewServer(system)
+	server := api.NewServer(system, config)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	system.StartElevatorRunners(ctx)
-	// 每隔 defaultAutoStepInterval 推进一次电梯系统，
-	// 模拟电梯的自动运行。
 	server.StartAutoStep(ctx, defaultAutoStepInterval)
 
 	mux := http.NewServeMux()

@@ -1,24 +1,34 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os_sp26_proj1/internal/elevator"
+	"sync"
+	"time"
 )
 
 // Server 持有所有 HTTP handler 需要的依赖。
-// 后续新增的依赖（配置、日志等）只需要在这里加字段，不影响 handler 函数签名。
 type Server struct {
 	System *elevator.System
+
+	mu              sync.Mutex
+	config          elevator.SystemConfig
+	baseCtx         context.Context
+	autoStepCancel  context.CancelFunc
+	autoStepInterval time.Duration
+	autoStepStarted bool
 }
 
-// NewServer 创建 API server，并保存 handler 需要访问的电梯系统。
-func NewServer(system *elevator.System) *Server {
+// NewServer 创建 API server，并保存重建系统所需的配置。
+func NewServer(system *elevator.System, config elevator.SystemConfig) *Server {
 	return &Server{
 		System: system,
+		config: config,
 	}
 }
 
@@ -28,7 +38,54 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/request", s.handleRequest)
 	mux.HandleFunc("/api/scheduler", s.handleScheduler)
+	mux.HandleFunc("/api/floor-count", s.handleFloorCount)
+	mux.HandleFunc("/api/elevator-count", s.handleElevatorCount)
 	mux.Handle("/", http.FileServer(http.Dir("web")))
+}
+
+// restartSystemLocked 用新的楼层数和电梯数重建整个电梯系统。
+// 调用者必须持有 s.mu。
+func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
+	if floorCount < 2 || floorCount > 40 {
+		return fmt.Errorf("floor count must be between 2 and 40, got %d", floorCount)
+	}
+	if elevatorCount < 1 || elevatorCount > 10 {
+		return fmt.Errorf("elevator count must be between 1 and 10, got %d", elevatorCount)
+	}
+
+	// 停止当前 auto-step goroutine
+	if s.autoStepCancel != nil {
+		s.autoStepCancel()
+		s.autoStepCancel = nil
+	}
+
+	// 用新参数重建 System
+	newConfig := s.config
+	newConfig.Floors = floorCount
+	newConfig.ElevatorCount = elevatorCount
+	newSystem, err := elevator.NewSystem(newConfig)
+	if err != nil {
+		return err
+	}
+
+	// 为新 System 启动电梯 goroutine
+	newSystem.StartElevatorRunners(s.baseCtx)
+
+	// 替换旧的 System
+	oldSystem := s.System
+	s.System = newSystem
+
+	// 释放旧系统资源
+	if oldSystem != nil {
+		oldSystem.Close()
+	}
+
+	// 重新启动 auto-step
+	if s.autoStepStarted {
+		s.startAutoStepLocked()
+	}
+
+	return nil
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +111,10 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.mu.Lock()
 	data, err := s.System.Snapshot()
+	s.mu.Unlock()
+
 	if err != nil {
 		http.Error(w, "failed to get snapshot", http.StatusInternalServerError)
 		return
@@ -76,6 +136,10 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := validateCreateRequestPayload(payload, s.System.FloorCount); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -100,12 +164,12 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// 切换调度算法的 API
 func (s *Server) handleScheduler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	type SchedulerPayload struct {
 		Name string `json:"name"`
 	}
@@ -114,10 +178,15 @@ func (s *Server) handleScheduler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.System.SetScheduler(schedulerPayload.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	response := map[string]any{
 		"status": "scheduler switched",
 	}
@@ -125,11 +194,71 @@ func (s *Server) handleScheduler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
+}
 
+func (s *Server) handleFloorCount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type floorCountPayload struct {
+		FloorCount int `json:"floorCount"`
+	}
+	var p floorCountPayload
+	if err := decodeJSONBody(r, &p); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	elevatorCount := len(s.System.Elevators)
+	if err := s.restartSystemLocked(p.FloorCount, elevatorCount); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":     "system restarted",
+		"floorCount": p.FloorCount,
+	})
+}
+
+func (s *Server) handleElevatorCount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type elevatorCountPayload struct {
+		ElevatorCount int `json:"elevatorCount"`
+	}
+	var p elevatorCountPayload
+	if err := decodeJSONBody(r, &p); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	floorCount := s.System.FloorCount
+	if err := s.restartSystemLocked(floorCount, p.ElevatorCount); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":        "system restarted",
+		"elevatorCount": p.ElevatorCount,
+	})
 }
 
 // createRequestPayload 是 POST /api/request 接收的请求体。
-// 客户端只提交它实际知道的信息；ID、Status 和 tick 都由后端创建。
 type createRequestPayload struct {
 	Floor     int                  `json:"floor"`
 	Direction elevator.Direction   `json:"direction"`

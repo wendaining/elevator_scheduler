@@ -287,14 +287,15 @@ func createRequestForTest(t *testing.T, server *Server, body string) elevator.Re
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
-	system, err := elevator.NewSystem(elevator.SystemConfig{
+	config := elevator.SystemConfig{
 		Floors:           20,
 		ElevatorCount:    5,
 		TicksPerFloor:    1,
 		DoorBaseTicks:    2,
 		TickPerPassenger: 1,
 		DatabasePath:     ":memory:",
-	})
+	}
+	system, err := elevator.NewSystem(config)
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
 	}
@@ -304,7 +305,7 @@ func newTestServer(t *testing.T) *Server {
 		}
 	})
 
-	return NewServer(system)
+	return NewServer(system, config)
 }
 
 func assertTextError(t *testing.T, body string) {

@@ -1,6 +1,9 @@
 package elevator
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // Direction 是一个自定义的字符串类型。
 //
@@ -138,6 +141,7 @@ type System struct {
 	elevatorCommands       []chan elevatorTickCommand
 	elevatorRunnersDone    <-chan struct{}
 	elevatorRunnersStarted bool
+	runnerCancel           context.CancelFunc
 
 	nextRequestID int64
 }
