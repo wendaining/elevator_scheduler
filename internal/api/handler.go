@@ -44,9 +44,10 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("/", http.FileServer(http.Dir("web/dist")))
 }
 
-// restartSystemLocked 用新的楼层数和电梯数重建整个电梯系统。
+// restartSystemLocked 用新的楼层数、电梯数和调度算法重建整个电梯系统。
+// 每次重启写入新的数据库文件，确保每个运行周期内只有一种调度算法在记录数据。
 // 调用者必须持有 s.mu。
-func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
+func (s *Server) restartSystemLocked(floorCount, elevatorCount int, schedulerName string) error {
 	if floorCount < 2 || floorCount > 40 {
 		return fmt.Errorf("floor count must be between 2 and 40, got %d", floorCount)
 	}
@@ -61,6 +62,11 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int) error {
 	newConfig.DatabasePath = fmt.Sprintf("data/requests_%d.db", time.Now().Unix())
 	newSystem, err := elevator.NewSystem(newConfig)
 	if err != nil {
+		return err
+	}
+
+	if err := newSystem.SetScheduler(schedulerName); err != nil {
+		newSystem.Close()
 		return err
 	}
 
@@ -211,13 +217,15 @@ func (s *Server) handleScheduler(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := s.System.SetScheduler(schedulerPayload.Name); err != nil {
+	floorCount := s.System.FloorCount
+	elevatorCount := len(s.System.Elevators)
+	if err := s.restartSystemLocked(floorCount, elevatorCount, schedulerPayload.Name); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	response := map[string]any{
-		"status": "scheduler switched",
+		"status": "system restarted",
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -244,7 +252,8 @@ func (s *Server) handleFloorCount(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	elevatorCount := len(s.System.Elevators)
-	if err := s.restartSystemLocked(p.FloorCount, elevatorCount); err != nil {
+	schedulerName := s.System.SchedulerName
+	if err := s.restartSystemLocked(p.FloorCount, elevatorCount, schedulerName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -275,7 +284,8 @@ func (s *Server) handleElevatorCount(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	floorCount := s.System.FloorCount
-	if err := s.restartSystemLocked(floorCount, p.ElevatorCount); err != nil {
+	schedulerName := s.System.SchedulerName
+	if err := s.restartSystemLocked(floorCount, p.ElevatorCount, schedulerName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
