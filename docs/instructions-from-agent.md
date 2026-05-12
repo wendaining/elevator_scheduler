@@ -41,7 +41,7 @@
 
 - [x] 创建 `internal/elevator/system.go`
 - [x] 实现 `NewSystem(floors int, elevatorCount int)` 初始化函数
-- [ ] 实现添加请求的方法，例如 `AddHallRequest(floor int, direction Direction)`
+- [x] 实现添加请求的方法，例如 `AddHallRequest(floor int, direction Direction)`
 - [x] 实现查看状态的方法，例如 `Snapshot()`
 - [x] 实现一个简单的 `Step()` 方法：每调用一次，系统向前推进一个时间片
 
@@ -271,14 +271,14 @@
 
 前端改动顺序：只有在调度算法、并发模型、以及切换调度算法的 API 都完成之后，才继续修改前端。
 
-- [ ] 显示电梯开门 / 关门状态
-- [ ] 显示每部电梯的目标楼层或任务队列
-- [ ] 显示全局待处理请求
-- [ ] 增加调度算法切换控件
-- [ ] 调度算法切换控件使用类似下拉菜单的交互，调用切换算法 API
-- [ ] 增加简单动画或楼层高亮
-- [ ] 保证界面信息清楚，不为了好看牺牲可读性
-- [ ] 做一次小提交，例如 `feat: improve elevator dashboard`
+- [x] 显示电梯开门 / 关门状态
+- [x] 显示每部电梯的目标楼层或任务队列
+- [x] 显示全局待处理请求
+- [x] 增加调度算法切换控件
+- [x] 调度算法切换控件使用类似下拉菜单的交互，调用切换算法 API
+- [x] 增加简单动画或楼层高亮
+- [x] 保证界面信息清楚，不为了好看牺牲可读性
+- [x] 做一次小提交，例如 `feat: improve elevator dashboard`
 
 ## 10. 完成算法部分
 

@@ -106,8 +106,8 @@
 
 ### 第 7 步：在 main.go 中配置静态文件路径
 
-- [ ] Vite 构建后产物在 `web/dist/`，修改 `main.go` 中 `http.Dir("web")` → `http.Dir("web/dist")`
-- [ ] **验证**：`go run ./cmd/server` 后浏览器访问 `localhost:8080` 看到新前端
+- [x] Vite 构建后产物在 `web/dist/`，修改 `main.go` 中 `http.Dir("web")` → `http.Dir("web/dist")`
+- [x] **验证**：`go run ./cmd/server` 后浏览器访问 `localhost:8080` 看到新前端
 
 ## 关键设计决策
 
