@@ -245,3 +245,42 @@ function onSelect(id) {
 - 楼层按钮 hover 有反馈，边缘按钮 disabled
 - 点击电梯标签可选中/取消（蓝色高亮）
 - 运行 `go run ./cmd/server` 后点击楼层按钮，Network 面板可看到 `POST /api/request` 请求
+
+## 2026-05-12：电梯颜色与动效（计划第 4 步）
+
+本阶段目标：电梯轿厢改为半透明 + 柔光效果，用颜色区分运行状态。
+
+### 设计思路
+
+之前是一个灰色实心方块，现在改为 **半透明玻璃质感**：
+- `rgba` 颜色 + `box-shadow` 柔光晕
+- 三种状态通过 computed class 切换
+- 位置和颜色都有 `transition`，视觉连续
+
+### 状态颜色
+
+| 状态 | 条件 | 颜色 | 视觉 |
+|------|------|------|------|
+| 空闲 | `direction === "idle"` | `rgba(103,194,58, 0.25)` | 绿色半透明 + 绿色光晕 |
+| 移动 | `direction !== "idle" && !doorOpen` | `rgba(230,162,60, 0.3)` | 黄色半透明 + 暖色光晕 |
+| 开门 | `doorOpen === true` | `rgba(245,108,108, 0.3)` | 红色半透明 + 红色光晕 |
+
+### 关键 CSS
+
+```css
+.elevator-car {
+  transition: background 0.5s, box-shadow 0.5s, border-color 0.5s;
+}
+
+.car-wrapper {
+  transition: top 0.45s ease;  /* 位置平滑过渡 */
+}
+```
+
+颜色和位移有各自独立的 transition，换楼层时颜色渐变和滑动同时发生。
+
+### 新增细节
+
+- **方向箭头**：移动时轿厢内显示 ▲ 或 ▼，空闲/开门时隐藏
+- **角标**：灰色圆形数字，位于轿厢右上角，显示剩余停靠计划数
+- **wrapper 层**：`car-wrapper` 负责定位，`elevator-car` 负责外观，职责分离

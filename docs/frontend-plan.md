@@ -58,14 +58,15 @@
 
 ### 第 4 步：电梯移动和颜色
 
-- [ ] 在 `ElevatorShaft.vue` 中渲染一台电梯轿厢方块：
-  - 根据 `currentFloor` 动态定位，使用 CSS `transition` 平滑移动
+- [x] 在 `ElevatorShaft.vue` 中渲染一台电梯轿厢方块：
+  - `rgba` 半透明 + `box-shadow` 柔光效果，`transition` 同时作用于位置和颜色变化
   - 颜色逻辑：
-    - `doorOpen === true` → 红色（开门等待）
-    - `doorOpen === false && direction !== "idle"` → 黄色（移动中）
-    - `direction === "idle"` → 绿色（空闲待命）
-  - 显示 `stops` 数量作为一个小角标，表示该电梯当前有多少停靠计划
-- [ ] **验证**：提交请求后，能看到电梯变成黄色移动，到目标层后变红开门
+    - `doorOpen === true` → 红色半透明 + 红色光晕（开门等待）
+    - `doorOpen === false && direction !== "idle"` → 黄色半透明 + 暖色光晕（移动中）
+    - `direction === "idle"` → 绿色半透明 + 绿色光晕（空闲待命）
+  - 移动时轿厢内显示 ▲/▼ 方向箭头
+  - 右上角灰色圆形角标显示 `stops` 数量
+- [x] **验证**：提交请求后，能看到电梯变成黄色移动，到目标层后变红开门
 
 ### 第 5 步：右侧配置面板
 
