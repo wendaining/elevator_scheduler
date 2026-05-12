@@ -7,10 +7,11 @@
       </header>
       <div class="layout">
         <div class="main-area">
-          <BuildingView
-            :selected-elevator-id="selectedElevatorId"
-            @update:selected-elevator-id="onSelectedChange"
-          />
+        <BuildingView
+          :selected-elevator-id="selectedElevatorId"
+          @log="appendLog"
+          @update:selected-elevator-id="onSelectedChange"
+        />
         </div>
         <div class="side-panel">
           <ControlPanel
@@ -34,7 +35,11 @@ const state = ref(null)
 const selectedElevatorId = ref(null)
 const error = ref(null)
 const config = ref(null)
+const logs = ref([])
 let timer = null
+let nextLogID = 1
+let previousRequests = new Map()
+let hasPreviousState = false
 
 function onSelectedChange(id) {
   selectedElevatorId.value = id
@@ -68,16 +73,70 @@ async function startPolling() {
 
 async function tick() {
   try {
-    state.value = await fetchState()
+    const nextState = await fetchState()
+    appendRequestCompletionLogs(state.value, nextState)
+    state.value = nextState
     error.value = null
   } catch (err) {
     error.value = err.message
   }
 }
 
+function appendLog(text, tick = state.value?.currentTick ?? 0) {
+  logs.value.unshift({
+    id: nextLogID++,
+    tick,
+    text,
+  })
+  logs.value = logs.value.slice(0, 40)
+}
+
+function trackRequest(request) {
+  if (!request) return
+  previousRequests.set(request.id, request)
+  hasPreviousState = true
+}
+
+function appendRequestCompletionLogs(previousState, nextState) {
+  const nextRequests = requestMapFromState(nextState)
+  if (!hasPreviousState || isSystemRestart(previousState, nextState)) {
+    previousRequests = nextRequests
+    hasPreviousState = true
+    return
+  }
+
+  for (const [id, request] of previousRequests) {
+    if (!nextRequests.has(id)) {
+      appendLog(formatRequestCompleted(request), nextState.currentTick)
+    }
+  }
+  previousRequests = nextRequests
+}
+
+function requestMapFromState(snapshot) {
+  const entries = Object.entries(snapshot?.requests || {})
+  return new Map(entries.map(([id, request]) => [Number(id), request]))
+}
+
+function isSystemRestart(previousState, nextState) {
+  if (!previousState) return false
+  return nextState.currentTick < previousState.currentTick ||
+    nextState.floorCount !== previousState.floorCount ||
+    nextState.elevators.length !== previousState.elevators.length
+}
+
+function formatRequestCompleted(request) {
+  const kind = request.kind === 'cabin' ? 'Cabin' : 'Hall'
+  const elevator = request.assignedElevatorId ? ` #${request.assignedElevatorId}` : ''
+  return `请求 #${request.id} 完成：${kind}${elevator} ${request.floor} 楼`
+}
+
 provide('state', state)
 provide('selectedElevatorId', selectedElevatorId)
 provide('config', config)
+provide('logs', logs)
+provide('appendLog', appendLog)
+provide('trackRequest', trackRequest)
 </script>
 
 <style>

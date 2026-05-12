@@ -33,12 +33,14 @@ import ElevatorShaft from './ElevatorShaft.vue'
 import { createRequest } from '../api.js'
 
 const state = inject('state')
+const appendLog = inject('appendLog')
+const trackRequest = inject('trackRequest')
 
 const props = defineProps({
   selectedElevatorId: { type: Number, default: null },
 })
 
-const emit = defineEmits(['update:selectedElevatorId'])
+const emit = defineEmits(['update:selectedElevatorId', 'log'])
 
 function onSelect(id) {
   const next = props.selectedElevatorId === id ? null : id
@@ -63,9 +65,24 @@ const labelTrackStyle = computed(() => {
 // hall 请求
 async function onHallRequest(floor, direction) {
   try {
-    await createRequest(floor, direction, 'hall')
+    const response = await createRequest(floor, direction, 'hall')
+    if (trackRequest) {
+      trackRequest(response.request)
+    }
+    const symbol = direction === 'up' ? '上行' : '下行'
+    const text = `请求 #${response.request.id} 创建：Hall ${symbol} ${floor} 楼`
+    if (appendLog) {
+      appendLog(text, response.currentTick)
+    } else {
+      emit('log', text)
+    }
   } catch (err) {
-    console.error(err)
+    const text = `Hall 请求失败：${err.message}`
+    if (appendLog) {
+      appendLog(text)
+    } else {
+      emit('log', text)
+    }
   }
 }
 </script>

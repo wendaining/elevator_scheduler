@@ -118,6 +118,9 @@ import {
 import LogTerminal from './LogTerminal.vue'
 
 const stateRef = inject('state')
+const logs = inject('logs')
+const appendLog = inject('appendLog')
+const trackRequest = inject('trackRequest')
 
 const props = defineProps({
   selectedElevatorId: { type: Number, default: null },
@@ -133,8 +136,6 @@ const cabinFloor = ref(1)
 const submittingCabin = ref(false)
 const editingFloor = ref(false)
 const editingElevator = ref(false)
-const logs = ref([])
-let nextLogID = 1
 
 const schedulerOptions = [
   { value: 'first-available', label: '优先空闲算法' },
@@ -172,15 +173,6 @@ watch(
     }
   },
 )
-
-function appendLog(text) {
-  logs.value.unshift({
-    id: nextLogID++,
-    tick: state.value.currentTick,
-    text,
-  })
-  logs.value = logs.value.slice(0, 24)
-}
 
 async function submitFloorCount(value) {
   try {
@@ -221,8 +213,9 @@ async function submitCabinRequest() {
 
   submittingCabin.value = true
   try {
-    await createRequest(cabinFloor.value, 'idle', 'cabin', props.selectedElevatorId)
-    appendLog(`#${selectedElevator.value.id} cabin 请求：${cabinFloor.value} 楼`)
+    const response = await createRequest(cabinFloor.value, 'idle', 'cabin', props.selectedElevatorId)
+    trackRequest(response.request)
+    appendLog(`请求 #${response.request.id} 创建：Cabin #${selectedElevator.value.id} ${cabinFloor.value} 楼`, response.currentTick)
     emit('clear-selection')
   } catch (err) {
     appendLog(`cabin 请求失败：${err.message}`)

@@ -374,6 +374,7 @@ npm run build
 
 构建已通过。
 
+
 ## 2026-05-12：完成响应式布局和细节（计划第 6 步）
 
 本阶段目标：让页面在不同窗口尺寸、楼层数和电梯数下保持可读，不因为控件挤压导致布局失控。
@@ -753,6 +754,70 @@ web/src/App.vue
 ```
 
 这样 header 固定占一行，下面的电梯可视化区域和右侧面板使用剩余高度。
+
+### 验证
+
+```bash
+npm run build
+```
+
+构建已通过。
+
+## 2026-05-12：补充请求创建和完成事件日志
+
+本次修正右侧事件日志只显示部分操作的问题。
+
+之前日志主要在 `ControlPanel.vue` 内部维护，所以右侧 Cabin 请求、楼层数调整、算法切换能记录，但左侧楼层按钮创建的 Hall 请求不会进入日志。
+
+### 新方案
+
+把日志状态提升到 `App.vue` 统一维护：
+
+```text
+App.vue
+  logs
+  appendLog()
+  trackRequest()
+```
+
+然后通过 `provide` 提供给子组件：
+
+```js
+provide('logs', logs)
+provide('appendLog', appendLog)
+provide('trackRequest', trackRequest)
+```
+
+`BuildingView.vue` 在创建 Hall 请求成功后写入日志：
+
+```text
+请求 #id 创建：Hall 上行/下行 x 楼
+```
+
+`ControlPanel.vue` 在创建 Cabin 请求成功后写入日志：
+
+```text
+请求 #id 创建：Cabin #elevator x 楼
+```
+
+### 请求完成日志
+
+后端的运行态 `requests` 只保存 active 请求。请求完成后会从 `requests` map 删除。
+
+前端利用这一点，在每次轮询 `GET /api/state` 后比较：
+
+```text
+上一帧 active requests
+当前帧 active requests
+```
+
+如果某个 request ID 从上一帧存在变成当前帧不存在，就记录：
+
+```text
+请求 #id 完成：Hall/Cabin #elevator x 楼
+```
+
+为了避免楼层数/电梯数调整导致系统重启时误报完成，前端会在检测到 `currentTick` 变小、楼层数变化或电梯数变化时重置追踪表，不写完成日志。
 
 ### 验证
 
