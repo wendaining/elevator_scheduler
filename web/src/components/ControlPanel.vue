@@ -31,6 +31,7 @@
           :max="40"
           :step="1"
           :show-tooltip="false"
+          @input="editingFloor = true"
           @change="submitFloorCount"
         />
       </div>
@@ -46,6 +47,7 @@
           :max="10"
           :step="1"
           :show-tooltip="false"
+          @input="editingElevator = true"
           @change="submitElevatorCount"
         />
       </div>
@@ -129,6 +131,8 @@ const elevatorDraft = ref(1)
 const schedulerDraft = ref('first-available')
 const cabinFloor = ref(1)
 const submittingCabin = ref(false)
+const editingFloor = ref(false)
+const editingElevator = ref(false)
 const logs = ref([])
 let nextLogID = 1
 
@@ -148,8 +152,12 @@ watch(
   state,
   (next) => {
     if (!next) return
-    floorDraft.value = next.floorCount
-    elevatorDraft.value = next.elevators.length
+    if (!editingFloor.value) {
+      floorDraft.value = next.floorCount
+    }
+    if (!editingElevator.value) {
+      elevatorDraft.value = next.elevators.length
+    }
     schedulerDraft.value = next.schedulerName
     cabinFloor.value = Math.min(Math.max(cabinFloor.value, 1), next.floorCount)
   },
@@ -179,7 +187,10 @@ async function submitFloorCount(value) {
     await setFloorCount(value)
     appendLog(`楼层数调整为 ${value}`)
   } catch (err) {
+    floorDraft.value = state.value.floorCount
     appendLog(`楼层数调整失败：${err.message}`)
+  } finally {
+    editingFloor.value = false
   }
 }
 
@@ -188,7 +199,10 @@ async function submitElevatorCount(value) {
     await setElevatorCount(value)
     appendLog(`电梯数调整为 ${value}`)
   } catch (err) {
+    elevatorDraft.value = state.value.elevators.length
     appendLog(`电梯数调整失败：${err.message}`)
+  } finally {
+    editingElevator.value = false
   }
 }
 
