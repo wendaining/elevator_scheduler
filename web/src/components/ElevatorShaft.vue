@@ -95,12 +95,13 @@ const directionSymbol = computed(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 80px;
-  border-right: 1px solid #ddd;
+  min-width: 96px;
+  border-right: 1px solid #d1d5db;
+  background: #f8fafc;
 }
 
 .shaft.selected .shaft-header {
-  background: #409eff;
+  background: #111827;
   color: #fff;
 }
 
@@ -113,20 +114,20 @@ const directionSymbol = computed(() => {
   font-size: 13px;
   cursor: pointer;
   user-select: none;
-  background: #eee;
-  border-bottom: 1px solid #ddd;
+  background: #e5e7eb;
+  border-bottom: 1px solid #d1d5db;
   transition: background 0.2s, color 0.2s;
 }
 
 .shaft-header:hover {
-  background: #d0d0d0;
+  background: #d1d5db;
 }
 
 .shaft-track {
   flex: 1;
   display: grid;
   overflow: hidden;
-  background: #fafafa;
+  background: #f8fafc;
 }
 
 /* 楼层方块 */
@@ -136,29 +137,30 @@ const directionSymbol = computed(() => {
   justify-content: center;
   gap: 2px;
   position: relative;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e5e7eb;
   box-sizing: border-box;
   min-height: 0;
-  background: #fafafa;
+  background: #f8fafc;
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .floor-btn {
-  width: 24px;
-  height: 24px;
-  border: 1px solid #ccc;
+  width: clamp(18px, 2.4vh, 24px);
+  height: clamp(18px, 2.4vh, 24px);
+  border: 1px solid #cbd5e1;
   border-radius: 3px;
   background: #fff;
   cursor: pointer;
-  font-size: 11px;
+  font-size: clamp(9px, 1.4vh, 11px);
   line-height: 1;
   padding: 0;
-  color: #555;
-  transition: background 0.15s;
+  color: #334155;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .floor-btn:hover:not(:disabled) {
-  background: #e8e8e8;
+  background: #f1f5f9;
+  border-color: #94a3b8;
 }
 
 .floor-btn:disabled {
@@ -229,5 +231,22 @@ const directionSymbol = computed(() => {
   align-items: center;
   justify-content: center;
   z-index: 2;
+}
+
+@media (max-height: 720px) {
+  .shaft-header {
+    height: 24px;
+    font-size: 12px;
+  }
+
+  .floor-block {
+    gap: 1px;
+  }
+
+  .stop-badge {
+    width: 16px;
+    height: 16px;
+    font-size: 9px;
+  }
 }
 </style>

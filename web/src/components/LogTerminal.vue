@@ -28,6 +28,7 @@ defineProps({
 
 <style scoped>
 .terminal {
+  flex-shrink: 0;
   border: 1px solid #20252b;
   background: #111418;
   color: #d8dde4;
@@ -53,7 +54,7 @@ defineProps({
 }
 
 .terminal-body {
-  height: 160px;
+  height: clamp(120px, 20vh, 180px);
   overflow: auto;
   padding: 8px 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -80,5 +81,11 @@ defineProps({
   color: #d8dde4;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .terminal {
+    min-height: 0;
+  }
 }
 </style>

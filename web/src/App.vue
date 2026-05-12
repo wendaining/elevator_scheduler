@@ -89,20 +89,35 @@ html, body, #app {
 }
 
 #app-root {
+  --el-color-primary: #111827;
+  --el-color-primary-light-3: #374151;
+  --el-color-primary-light-5: #6b7280;
+  --el-color-primary-light-7: #d1d5db;
+  --el-color-primary-light-8: #e5e7eb;
+  --el-color-primary-light-9: #f3f4f6;
+  --el-color-primary-dark-2: #030712;
+  --el-border-radius-base: 6px;
+  --el-text-color-primary: #111827;
+  --el-text-color-regular: #374151;
+  --el-border-color: #d1d5db;
+  --el-fill-color-light: #f3f4f6;
+
   height: 100%;
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  color: #333;
-  background: #f5f5f5;
+  color: #111827;
+  background: #f3f4f6;
 }
 
 .layout {
   display: flex;
   height: 100%;
+  min-width: 0;
 }
 
 .main-area {
   flex: 3;
-  overflow: hidden;
+  min-width: 0;
+  overflow: auto;
 }
 
 .side-panel {
@@ -118,5 +133,38 @@ html, body, #app {
 .loading {
   padding: 2rem;
   color: #999;
+}
+
+pre {
+  padding: 16px;
+  color: #991b1b;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  html, body, #app {
+    overflow: auto;
+  }
+
+  .layout {
+    min-height: 100%;
+    height: auto;
+    flex-direction: column;
+  }
+
+  .main-area {
+    height: 70vh;
+    min-height: 520px;
+  }
+
+  .side-panel {
+    flex: none;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    border-left: 0;
+    border-top: 1px solid #e0e0e0;
+    overflow: visible;
+  }
 }
 </style>

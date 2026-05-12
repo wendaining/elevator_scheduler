@@ -374,6 +374,101 @@ npm run build
 
 构建已通过。
 
+## 2026-05-12：完成响应式布局和细节（计划第 6 步）
+
+本阶段目标：让页面在不同窗口尺寸、楼层数和电梯数下保持可读，不因为控件挤压导致布局失控。
+
+### 黑灰主题
+
+在 `App.vue` 的根节点上覆盖 Element Plus 的主题变量：
+
+```css
+#app-root {
+  --el-color-primary: #111827;
+  --el-color-primary-light-3: #374151;
+  --el-color-primary-light-7: #d1d5db;
+  --el-color-primary-light-9: #f3f4f6;
+}
+```
+
+这样 `el-slider`、`el-button`、`el-select` 的主色会更接近当前黑灰界面，而不是默认蓝色。
+
+### 主布局响应式
+
+桌面端保持：
+
+```text
+左侧电梯区域 flex: 3
+右侧配置面板 flex: 1
+```
+
+窄屏时改为上下布局：
+
+```css
+@media (max-width: 900px) {
+  .layout {
+    flex-direction: column;
+  }
+}
+```
+
+左侧电梯区域在窄屏时允许横向滚动，避免 5 到 10 台电梯被压得过窄。
+
+### 电梯井道细节
+
+`ElevatorShaft.vue` 中按钮尺寸改为：
+
+```css
+.floor-btn {
+  width: clamp(18px, 2.4vh, 24px);
+  height: clamp(18px, 2.4vh, 24px);
+}
+```
+
+这表示：
+
+```text
+窗口高度足够时，按钮最多 24px。
+楼层很多或高度很小时，按钮可以缩到 18px。
+```
+
+这样 30 到 40 层时按钮不会明显溢出楼层格子。
+
+### 右侧面板
+
+`ControlPanel.vue` 内部允许滚动：
+
+```css
+.control-panel {
+  overflow: auto;
+}
+```
+
+窄屏时右侧面板变成两列，再更窄时变成单列：
+
+```css
+@media (max-width: 900px) {
+  .control-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .control-panel {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+### 验证
+
+```bash
+npm run build
+```
+
+构建已通过。
+
 ## 2026-05-12：前端轮询间隔改为读取后端配置
 
 本次目标：整体模拟节奏加快一倍，并避免前后端分别维护 tick 间隔。

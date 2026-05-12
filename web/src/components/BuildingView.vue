@@ -74,20 +74,25 @@ async function onHallRequest(floor, direction) {
 .building {
   display: flex;
   height: 100%;
+  min-width: max-content;
+  background: #f8fafc;
 }
 
 .floor-labels {
-  width: 32px;
+  width: 34px;
   display: flex;
   flex-direction: column;
-  background: #f0f0f0;
-  border-right: 1px solid #ddd;
+  background: #f3f4f6;
+  border-right: 1px solid #d1d5db;
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 4;
 }
 
 .floor-label-spacer {
   height: 28px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #d1d5db;
   box-sizing: border-box;
 }
 
@@ -102,8 +107,14 @@ async function onHallRequest(floor, direction) {
   align-items: center;
   justify-content: center;
   font-size: 11px;
-  color: #999;
-  border-bottom: 1px solid #eee;
+  color: #8b95a1;
+  border-bottom: 1px solid #e5e7eb;
   box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .building {
+    min-width: 760px;
+  }
 }
 </style>

@@ -157,10 +157,10 @@ watch(
 )
 
 watch(
-  selectedElevator,
-  (next) => {
-    if (next) {
-      cabinFloor.value = next.currentFloor
+  () => props.selectedElevatorId,
+  () => {
+    if (selectedElevator.value) {
+      cabinFloor.value = selectedElevator.value.currentFloor
     }
   },
 )
@@ -224,10 +224,13 @@ async function submitCabinRequest() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .panel-section {
-  border: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  border: 1px solid #dfe3e8;
   border-radius: 6px;
   padding: 12px;
   background: #fff;
@@ -247,7 +250,7 @@ async function submitCabinRequest() {
 }
 
 .tick-value {
-  font-size: 34px;
+  font-size: clamp(28px, 4vw, 34px);
   line-height: 1;
   font-weight: 700;
   color: #111827;
@@ -306,6 +309,23 @@ async function submitCabinRequest() {
   width: 100%;
 }
 
+:deep(.el-slider__bar) {
+  background-color: #111827;
+}
+
+:deep(.el-slider__button) {
+  border-color: #111827;
+}
+
+:deep(.el-button--primary) {
+  --el-button-bg-color: #111827;
+  --el-button-border-color: #111827;
+  --el-button-hover-bg-color: #374151;
+  --el-button-hover-border-color: #374151;
+  --el-button-active-bg-color: #030712;
+  --el-button-active-border-color: #030712;
+}
+
 .cabin-card {
   border: 1px solid #d8e9ff;
   background: #f7fbff;
@@ -339,5 +359,30 @@ async function submitCabinRequest() {
   border: 1px dashed #d6dbe2;
   border-radius: 6px;
   background: #fafafa;
+}
+
+@media (max-width: 900px) {
+  .control-panel {
+    height: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .overview {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .control-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .overview {
+    flex-direction: column;
+  }
 }
 </style>
