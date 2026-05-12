@@ -14,8 +14,8 @@ func main() {
 	const (
 		defaultFloorCount       = 20
 		defaultElevatorCount    = 5
-		defaultTicksPerFloor    = 5
-		defaultDoorBaseTicks    = 2
+		defaultTicksPerFloor    = 2
+		defaultDoorBaseTicks    = 4
 		defaultTickPerPassenger = 1
 		defaultAutoStepInterval = 250 * time.Millisecond
 	)
