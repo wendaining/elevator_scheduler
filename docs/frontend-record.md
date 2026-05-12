@@ -715,3 +715,49 @@ npm run build
 ```
 
 构建已通过。
+
+## 2026-05-12：增加页面标题栏
+
+本次给 Vue 前端增加顶部标题：
+
+```text
+电梯调度算法可视化程序
+```
+
+改动位置：
+
+```text
+web/src/App.vue
+```
+
+实现方式：
+
+```html
+<header class="app-header">
+  <h1>电梯调度算法可视化程序</h1>
+</header>
+```
+
+为了避免标题栏挤压或覆盖原来的左右布局，`#app-root` 改为纵向 flex：
+
+```css
+#app-root {
+  display: flex;
+  flex-direction: column;
+}
+
+.layout {
+  flex: 1;
+  min-height: 0;
+}
+```
+
+这样 header 固定占一行，下面的电梯可视化区域和右侧面板使用剩余高度。
+
+### 验证
+
+```bash
+npm run build
+```
+
+构建已通过。

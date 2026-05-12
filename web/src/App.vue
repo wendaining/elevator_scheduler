@@ -1,20 +1,25 @@
 <template>
   <div id="app-root">
     <pre v-if="error">{{ error }}</pre>
-    <div v-else-if="state" class="layout">
-      <div class="main-area">
-        <BuildingView
-          :selected-elevator-id="selectedElevatorId"
-          @update:selected-elevator-id="onSelectedChange"
-        />
+    <template v-else-if="state">
+      <header class="app-header">
+        <h1>电梯调度算法可视化程序</h1>
+      </header>
+      <div class="layout">
+        <div class="main-area">
+          <BuildingView
+            :selected-elevator-id="selectedElevatorId"
+            @update:selected-elevator-id="onSelectedChange"
+          />
+        </div>
+        <div class="side-panel">
+          <ControlPanel
+            :selected-elevator-id="selectedElevatorId"
+            @clear-selection="selectedElevatorId = null"
+          />
+        </div>
       </div>
-      <div class="side-panel">
-        <ControlPanel
-          :selected-elevator-id="selectedElevatorId"
-          @clear-selection="selectedElevatorId = null"
-        />
-      </div>
-    </div>
+    </template>
     <p v-else class="loading">加载中…</p>
   </div>
 </template>
@@ -106,11 +111,32 @@ html, body, #app {
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #111827;
   background: #f3f4f6;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  height: 52px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  background: #111827;
+  color: #fff;
+  border-bottom: 1px solid #030712;
+}
+
+.app-header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .layout {
   display: flex;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -147,7 +173,7 @@ pre {
   }
 
   .layout {
-    min-height: 100%;
+    min-height: calc(100vh - 52px);
     height: auto;
     flex-direction: column;
   }
