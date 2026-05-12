@@ -51,7 +51,7 @@ func NewSystem(sc SystemConfig) (*System, error) {
 		}
 	}
 
-	scheduler := FirstAvailableScheduler{}
+	scheduler := SCANScheduler{}
 
 	return &System{
 		FloorCount:       sc.Floors,
