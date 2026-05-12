@@ -23,6 +23,8 @@ func NewScheduler(name string) (Scheduler, error) {
 		return FCFSScheduler{}, nil
 	case "scan":
 		return SCANScheduler{}, nil
+	case "look":
+		return LOOKScheduler{}, nil
 	default:
 		return nil, fmt.Errorf("unknown scheduler %q", name)
 	}

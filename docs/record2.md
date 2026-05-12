@@ -3356,3 +3356,104 @@ GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
 ```
 
 两者均已通过。
+
+## 2026-05-12：实现 LOOK 调度算法
+
+这次在 `internal/elevator/LOOKScheduler.go` 里补全了 LOOK 算法。
+
+LOOK 和 SCAN 的代码结构很接近：它们都会维护电梯的 `ScanDirection`，都会允许运行中的电梯顺路追加请求，也都会使用 `EstimateAssignmentScore()` 这个 cost 函数选择候选电梯。
+
+二者真正的区别在方向切换：
+
+```text
+SCAN：
+  理论上沿当前方向走到物理边界，例如 1 楼或顶楼，再反向。
+
+LOOK：
+  不等物理边界。
+  如果当前方向前方已经没有停靠计划，但反方向还有停靠计划，就立即反向。
+```
+
+所以 LOOK 新增了这个核心判断：
+
+```go
+func prepareLOOKDirection(e *Elevator) {
+	normalizeLOOKDirection(e)
+	if len(e.Stops) == 0 {
+		return
+	}
+
+	if hasLOOKStopAhead(*e, e.ScanDirection) {
+		return
+	}
+
+	oppositeDirection := oppositeLOOKDirection(e.ScanDirection)
+	if hasLOOKStopAhead(*e, oppositeDirection) {
+		e.ScanDirection = oppositeDirection
+	}
+}
+```
+
+这段代码的意思是：
+
+```text
+1. 先保证 ScanDirection 是 up 或 down。
+2. 如果电梯没有停靠计划，就不需要提前反向；后续接单时会按请求楼层重新对齐方向。
+3. 如果当前扫描方向前方还有 stop，就继续保持方向。
+4. 如果当前方向前方没有 stop，但反方向还有 stop，就把 ScanDirection 切到反方向。
+```
+
+分配请求时，LOOK 的候选电梯规则是：
+
+```text
+空闲电梯可以接单
+运行中电梯只有在请求楼层位于当前 ScanDirection 前方时可以接单
+hall 请求还要求请求方向和 ScanDirection 一致
+cabin 请求只看目标楼层是否顺路
+EmergencyStop 电梯不能接单
+```
+
+候选电梯之间仍然使用 cost 函数：
+
+```go
+score := EstimateAssignmentScore(s, scoreElevator, *request)
+```
+
+这意味着 LOOK 也会考虑：
+
+```text
+DistanceCost
+TurnPenalty
+StopPenalty
+WaitCompensation
+```
+
+### 新增测试
+
+新增文件：
+
+```text
+internal/elevator/LOOKScheduler_test.go
+```
+
+覆盖了三个行为：
+
+```text
+TestLOOKSchedulerAppendsRequestAlongTheWay
+  验证 LOOK 可以给运行中顺路电梯追加请求。
+
+TestLOOKSchedulerTurnsAroundWhenNoStopAhead
+  验证当前方向前方没有 stop、反方向有 stop 时，LOOK 会提前反向。
+
+TestLOOKSchedulerUsesCostStopPenalty
+  验证 LOOK 和 SCAN 一样复用 cost 函数，已有多个 stop 的电梯会因为 StopPenalty 变贵。
+```
+
+### 验证
+
+```bash
+GOCACHE=/tmp/os_sp26_proj1-go-build go test ./...
+GOCACHE=/tmp/os_sp26_proj1-go-build go test -race ./...
+```
+
+两者均已通过。
