@@ -41,7 +41,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/scheduler", s.handleScheduler)
 	mux.HandleFunc("/api/floor-count", s.handleFloorCount)
 	mux.HandleFunc("/api/elevator-count", s.handleElevatorCount)
-	mux.Handle("/", http.FileServer(http.Dir("web")))
+	mux.Handle("/", http.FileServer(http.Dir("web/dist")))
 }
 
 // restartSystemLocked 用新的楼层数和电梯数重建整个电梯系统。
