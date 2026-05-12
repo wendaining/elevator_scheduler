@@ -3596,3 +3596,92 @@ go test ./...
 ```
 
 已通过。
+
+## 2026-05-12：修复 cabin 请求被调度到错误电梯的严重 bug
+
+### 问题
+
+cabin 请求（电梯内乘客按下目标楼层）不应经过调度器分配，而应直接交给乘客所在电梯执行。但之前 `Request` 结构体不记录来自哪部电梯，所有调度器都把 cabin 请求当成 hall 请求自由分配候选电梯，导致"3 号电梯里按 4 楼，结果 2 号电梯去接"的荒谬行为。
+
+### 修复方案
+
+核心原则：**cabin 请求不在调度器中流转，在 `addRequestLocked` 里立刻分配给指定电梯。**
+
+具体改动：
+
+- `model.go`：`Request` 新增 `ElevatorID int` 字段，仅对 cabin 请求有意义
+- `system.go`：`AddRequest` 增加 `elevatorID` 参数；cabin 请求立即调用 `assignRequestToElevator` + `sortElevatorStops`，状态直接为 Assigned，永远不进 pending 态
+- `utils.go`：新增 `sortElevatorStops`，按 ScanDirection 排序停靠
+- `handler.go`：`createRequestPayload` 新增 `elevatorId`；校验 cabin 请求必须有合法 elevator ID
+- 前端 `api.js` 和 `ControlPanel.vue`：传递 elevatorId
+- 所有测试：hall 请求补 `, 0` 作为 elevator ID
+
+### 新增测试
+
+- `TestCabinRequestAssignedImmediatelyToCorrectElevator`：验证 3 号电梯在 17 楼时 cabin 去 4 楼的请求直接分配给 3 号电梯
+- `TestCabinRequestRejectsInvalidElevatorID`：验证 cabin 请求传非法电梯 ID 被拒绝
+
+## 2026-05-12：数据库改为每次运行新建文件，文件名编码运行元数据
+
+### 动机
+
+之前用固定文件名 `data/requests.db`，多次运行共享同一个数据库。现在每次重启都创建新的数据库文件，方便后续按算法、配置做性能对比分析。
+
+### 数据库文件名格式
+
+```
+data/requests_5e_20f_scan_1778561521.db
+             ↑   ↑    ↑       ↑
+           电梯 楼层 算法  UNIX时间戳
+```
+
+- `main.go`：启动时生成 `data/requests_{e}e_{f}f_scan_{ts}.db`
+- `handler.go` `restartSystemLocked`：每次重建系统时生成新的时间戳文件名
+
+### 附带简化
+
+由于每次重启都从空数据库开始，`maxCompletedRequestID` 永远为 0。趁机删除了 `MaxCompletedRequestID()` 方法（`request_store.go`），`NewSystem` 中 `nextRequestID` 硬编码为 1。
+
+旧测试 `TestNewSystemWithDatabaseContinuesRequestIDAfterRestart` 改为 `TestNewSystemRequestIDAlwaysStartsFromOne`，验证新行为。
+
+## 2026-05-12：调度算法切换也触发系统重启
+
+### 动机
+
+如果一次运行中切换过多种算法，那么数据库里的数据混杂了不同算法的结果，不利于对比分析。现在切换算法等价于重建整个 System，每个 DB 文件只包含一种算法的数据。
+
+### 改动
+
+- `restartSystemLocked` 新增 `schedulerName` 参数，`NewSystem` 后立即 `SetScheduler`
+- `handleScheduler` 不再调用 `SetScheduler` 运行时切换，改为读取当前楼层/电梯数后调 `restartSystemLocked` 重建
+- `handleFloorCount` / `handleElevatorCount` 保持当前 `SchedulerName` 传给 `restartSystemLocked`，不会因改配置而丢失算法选择
+
+## 2026-05-12：静态文件路径改为 web/dist
+
+Vite 构建产物在 `web/dist/`，将 handler.go 中 `http.Dir("web")` 改为 `http.Dir("web/dist")`。开发时用 `npm run dev`（Vite 自带 proxy），生产时用 `go run ./cmd/server`（serve 构建产物）。
+
+## 2026-05-12：修复并发安全和 goroutine 生命周期问题
+
+### P2：handler 竞态导致请求丢失
+
+旧代码中 handler 先 `s.mu.Lock()` 复制 `s.System` 指针再 `Unlock()`，之后才调用 `sys.AddRequest()`。如果 `RestartSystem` 在中间替换并关闭了旧 System，请求就被写入了被遗弃的旧对象。
+
+修复：所有 handler 持 `s.mu` 直到不再访问 `s.System`。`restartSystemLocked`（小写）要求调用者已持有锁，避免重复加锁。`handleFloorCount` / `handleElevatorCount` 持锁覆盖读取当前参数 + 重建系统全流程。
+
+### P2：nil baseCtx 导致 panic
+
+在未调用 `StartAutoStep` 的路径（如测试）触发重启时，`s.baseCtx` 为 nil，传给 `context.WithCancel` 会 panic。
+
+修复：用 `context.Background()` 兜底。
+
+### P2：新系统创建失败时旧系统停摆
+
+旧代码先取消 auto-step 再创建新系统。如果 `NewSystem` 失败，旧 auto-step 已被取消，旧系统不再推进。
+
+修复：先创建新 System、启动 elevator runners 并确认成功，再取消旧 auto-step、替换指针、关闭旧系统。
+
+### P2：elevator runner goroutine 泄漏
+
+旧 System 的 goroutine 不会被显式取消，阻塞在旧 channel 上直到进程退出。
+
+修复：`System` 加回 `runnerCancel` 字段（仅 cancel func，无 context）。`StartElevatorRunners` 内部创建子 context 并存储 cancel；`Close()` 先调 `runnerCancel()` 再关 DB。
