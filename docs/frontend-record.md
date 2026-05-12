@@ -513,3 +513,110 @@ npm run build
 ```
 
 构建已通过。
+
+## 2026-05-12：完成右侧配置面板（计划第 5 步）
+
+本阶段目标：把右侧占位文本替换成可操作的配置面板。
+
+### 新增文件
+
+```text
+web/src/components/ControlPanel.vue
+web/src/components/LogTerminal.vue
+```
+
+### ControlPanel.vue
+
+`ControlPanel.vue` 负责右侧所有操作：
+
+```text
+楼层数调节
+电梯数调节
+当前 tick 显示
+调度算法切换
+cabin 请求
+前端操作日志
+```
+
+它通过 `inject('state')` 获取后端轮询状态，通过 props 获取当前选中的电梯 ID：
+
+```js
+const stateRef = inject('state')
+
+const props = defineProps({
+  selectedElevatorId: { type: Number, default: null },
+})
+```
+
+### 楼层数和电梯数
+
+使用 Element Plus 的 `el-slider`：
+
+```html
+<el-slider
+  v-model="floorDraft"
+  :min="2"
+  :max="40"
+  :step="1"
+  :show-tooltip="false"
+  @change="submitFloorCount"
+/>
+```
+
+这里用 `@change` 而不是每次拖动都请求后端，避免拖动过程中连续重启系统。
+
+### 调度算法切换
+
+使用 `el-select`，前端显示中文名称，提交给后端时仍然使用算法代号：
+
+```text
+first-available → 优先空闲算法
+nearest-idle    → 最近优先算法
+fcfs            → 先来先服务算法
+scan            → SCAN 电梯算法
+look            → LOOK 电梯算法
+```
+
+### Cabin 请求
+
+`BuildingView.vue` 的选中状态现在由 `App.vue` 统一持有，再传给 `ControlPanel.vue`。
+
+原因是：cabin 请求提交成功后，右侧面板需要清空当前选中电梯，同时左侧顶部标签高亮也要取消。选中状态如果只存在于 `BuildingView.vue` 内部，右侧组件无法同步修改它。
+
+`App.vue` 现在这样连接两个组件：
+
+```html
+<BuildingView
+  :selected-elevator-id="selectedElevatorId"
+  @update:selected-elevator-id="onSelectedChange"
+/>
+
+<ControlPanel
+  :selected-elevator-id="selectedElevatorId"
+  @clear-selection="selectedElevatorId = null"
+/>
+```
+
+### LogTerminal.vue
+
+`LogTerminal.vue` 是一个小型深色日志面板，只负责展示日志列表。
+
+当前日志主要记录前端操作结果：
+
+```text
+楼层数调整
+电梯数调整
+调度算法切换
+cabin 请求提交
+失败信息
+```
+
+日志最多保留 24 条。
+
+### 验证
+
+```bash
+npm run build
+```
+
+构建已通过。

@@ -28,19 +28,20 @@
 </template>
 
 <script setup>
-import { computed, inject, ref } from 'vue'
+import { computed, inject } from 'vue'
 import ElevatorShaft from './ElevatorShaft.vue'
 import { createRequest } from '../api.js'
 
 const state = inject('state')
 
-// 选中的电梯 ID — 同时在本地和向上 emit
-const selectedElevatorId = ref(null)
+const props = defineProps({
+  selectedElevatorId: { type: Number, default: null },
+})
+
 const emit = defineEmits(['update:selectedElevatorId'])
 
 function onSelect(id) {
-  const next = selectedElevatorId.value === id ? null : id
-  selectedElevatorId.value = next
+  const next = props.selectedElevatorId === id ? null : id
   emit('update:selectedElevatorId', next)
 }
 

@@ -4,12 +4,15 @@
     <div v-else-if="state" class="layout">
       <div class="main-area">
         <BuildingView
+          :selected-elevator-id="selectedElevatorId"
           @update:selected-elevator-id="onSelectedChange"
         />
       </div>
       <div class="side-panel">
-        <!-- 第 5 步替换为 ControlPanel -->
-          <p>选中：{{ selectedElevatorId ? '#' + selectedElevatorId : '无' }}</p>
+        <ControlPanel
+          :selected-elevator-id="selectedElevatorId"
+          @clear-selection="selectedElevatorId = null"
+        />
       </div>
     </div>
     <p v-else class="loading">加载中…</p>
@@ -20,6 +23,7 @@
 import { ref, provide, onMounted, onUnmounted } from 'vue'
 import { fetchConfig, fetchState } from './api.js'
 import BuildingView from './components/BuildingView.vue'
+import ControlPanel from './components/ControlPanel.vue'
 
 const state = ref(null)
 const selectedElevatorId = ref(null)
@@ -107,8 +111,8 @@ html, body, #app {
   max-width: 360px;
   background: #fff;
   border-left: 1px solid #e0e0e0;
-  overflow-y: auto;
-  padding: 1rem;
+  overflow: hidden;
+  padding: 12px;
 }
 
 .loading {
