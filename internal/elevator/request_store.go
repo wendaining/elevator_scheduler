@@ -16,9 +16,15 @@ type RequestStore struct {
 }
 
 // OpenRequestStore 打开 SQLite 数据库，并确保 completed_requests 表存在。
+// databasePath 可以是完整路径、相对路径或 ":memory:"。
+// 除 ":memory:" 外，所有数据库文件统一写入 data/ 目录下。
 func OpenRequestStore(databasePath string) (*RequestStore, error) {
 	if databasePath == "" {
 		return nil, fmt.Errorf("database path cannot be empty")
+	}
+	// 如果传入的是简单文件名（没有目录前缀），统一写到 data/ 下。
+	if databasePath != ":memory:" && filepath.Dir(databasePath) == "." {
+		databasePath = filepath.Join("data", databasePath)
 	}
 	if err := ensureDatabaseDirectory(databasePath); err != nil {
 		return nil, err
