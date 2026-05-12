@@ -14,7 +14,6 @@
         class="floor-block"
         :class="floorStateClass(floor.num)"
       >
-        <span class="floor-label">{{ floor.num }}</span>
         <span v-if="isCurrentFloor(floor.num)" class="floor-status">
           {{ directionSymbol }}
         </span>
@@ -106,8 +105,10 @@ const directionSymbol = computed(() => {
 }
 
 .shaft-header {
-  text-align: center;
-  padding: 4px 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -140,14 +141,6 @@ const directionSymbol = computed(() => {
   min-height: 0;
   background: #fafafa;
   transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.floor-label {
-  position: absolute;
-  left: 4px;
-  font-size: 10px;
-  color: #bbb;
-  pointer-events: none;
 }
 
 .floor-btn {

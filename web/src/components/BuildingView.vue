@@ -2,13 +2,15 @@
   <div class="building">
     <!-- 楼层标签列 -->
     <div class="floor-labels">
-      <div
-        v-for="f in floorLabels"
-        :key="f"
-        class="floor-label-item"
-        :style="{ height: blockPct + '%' }"
-      >
-        {{ f }}
+      <div class="floor-label-spacer"></div>
+      <div class="floor-label-track" :style="labelTrackStyle">
+        <div
+          v-for="f in floorLabels"
+          :key="f"
+          class="floor-label-item"
+        >
+          {{ f }}
+        </div>
       </div>
     </div>
 
@@ -50,9 +52,11 @@ const floorLabels = computed(() => {
   return arr
 })
 
-const blockPct = computed(() => {
-  if (!state.value) return 5
-  return 100 / state.value.floorCount
+const labelTrackStyle = computed(() => {
+  if (!state.value) return {}
+  return {
+    gridTemplateRows: `repeat(${state.value.floorCount}, minmax(0, 1fr))`,
+  }
 })
 
 // hall 请求
@@ -78,6 +82,18 @@ async function onHallRequest(floor, direction) {
   background: #f0f0f0;
   border-right: 1px solid #ddd;
   flex-shrink: 0;
+}
+
+.floor-label-spacer {
+  height: 28px;
+  border-bottom: 1px solid #ddd;
+  box-sizing: border-box;
+}
+
+.floor-label-track {
+  flex: 1;
+  display: grid;
+  min-height: 0;
 }
 
 .floor-label-item {
