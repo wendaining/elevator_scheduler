@@ -166,3 +166,82 @@ App.vue 的 template 做了左右分栏：
 
 - `npx vite` 启动正常
 - 启动 `go run ./cmd/server` 后，浏览器 Console 可看到 `fetchState()` 返回的 JSON 对象
+
+## 2026-05-12：电梯可视化区域（计划第 3 步）
+
+本阶段目标：创建电梯井道组件和整体大楼视图，楼层按钮可触发 hall 请求。
+
+### 新增文件
+
+- `web/src/components/ElevatorShaft.vue`
+- `web/src/components/BuildingView.vue`
+
+### 组件树
+
+```text
+App.vue
+  └── BuildingView.vue            ← 楼层标签列 + k 台电梯井道
+        └── ElevatorShaft.vue × k ← 单台电梯的 n 层方块 + 轿厢
+```
+
+### ElevatorShaft.vue
+
+**Props：** `elevator`（电梯对象）、`floorCount`、`ticksPerFloor`、`isSelected`
+
+**Emits：** `select`（点击顶部标签）、`hall-request(floor, direction)`（点击楼层按钮）
+
+**楼层方块：** `v-for` 从 `floorCount` → 1 渲染。每个方块内有 ▲ 上行按钮和 ▼ 下行按钮。顶层（`floorCount`）的 ▲ 和底层（1）的 ▼ 设为 `disabled`（`opacity: 0.25`）。
+
+**动态高度：** `blockHeight = trackRef.clientHeight / floorCount`，在 `onMounted` 和 `window resize` 时重新计算，保证楼层数变化后方块自适应。
+
+**电梯轿厢定位：**
+
+```js
+// 含 tick 间平滑偏移
+let effective = e.currentFloor
+if (e.moveRemainingTicks > 0 && e.direction !== 'idle') {
+  const progress = 1 - (e.moveRemainingTicks / ticksPerFloor)
+  effective += e.direction === 'up' ? progress : -progress
+}
+effective = Math.max(1, Math.min(n, effective))
+
+const topPct = ((n - effective) / n) * 100
+```
+
+这样当 `TicksPerFloor = 5` 时，轿厢不会在第 5 个 tick 才从 2 楼跳到 3 楼，而是在 5 个 tick 内逐步移动，视觉更平滑。
+
+**Vue 语法要点：**
+
+- `<div :class="{ selected: isSelected }">` — 对象绑定 class：`isSelected` 为 true 时添加 `.selected`
+- `@click.stop` — `.stop` 修饰符阻止事件冒泡（避免点击按钮触发外层事件）
+- `$emit('hall-request', floor, direction)` — 子组件向父组件发事件，携带两个参数
+- `defineProps({ elevator: { type: Object, required: true } })` — 声明组件接受的 prop 及类型约束
+
+### BuildingView.vue
+
+**Inject：** `state`（从 App.vue 的 provide）
+
+**职责：** 渲染左侧楼层标签列 + k 个 `ElevatorShaft`，管理选中电梯状态。
+
+**选中逻辑：** 点击某台电梯的顶部标签选中，再次点击取消。选中后 `selectedElevatorId` 被写入 App.vue，同时通过 provide 提供给 ControlPanel（第 5 步用）。
+
+```js
+function onSelect(id) {
+  selectedElevatorId.value = selectedElevatorId.value === id ? null : id
+  emit('update:selectedElevatorId', next)
+}
+```
+
+### App.vue 更新
+
+- 引入 `BuildingView`
+- 新增 `selectedElevatorId` 状态，同时 provide 给后代组件
+- 右侧面板暂显示选中的电梯 ID（占位，第 5 步替换）
+
+### 验证结果
+
+- Vite dev server 启动正常
+- 页面显示 20 层 × 5 台电梯的完整布局
+- 楼层按钮 hover 有反馈，边缘按钮 disabled
+- 点击电梯标签可选中/取消（蓝色高亮）
+- 运行 `go run ./cmd/server` 后点击楼层按钮，Network 面板可看到 `POST /api/request` 请求

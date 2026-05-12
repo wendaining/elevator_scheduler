@@ -43,18 +43,18 @@
 
 ### 第 3 步：左侧电梯可视化区域
 
-- [ ] 创建 `ElevatorShaft.vue`（单台电梯井道组件）：
+- [x] 创建 `ElevatorShaft.vue`（单台电梯井道组件）：
   - 竖向排列 n 个楼层方块（n = floorCount），紧密排列
   - 每个方块内有两个按钮：▲ 上行 / ▼ 下行
   - 按钮点击时调用 `createRequest(floor, "up"/"down", "hall")`
   - 顶部显示电梯序号标签，标签可点击选中（emit 事件到父组件）
-- [ ] 创建 `BuildingView.vue`（整体大楼可视化）：
+- [x] 创建 `BuildingView.vue`（整体大楼可视化）：
   - 水平排列 k 台 `ElevatorShaft`，k = elevatorCount
-  - 使用 CSS Grid 或 Flexbox，响应式均分宽度
-- [ ] 电梯在方块间的位置用绝对定位或 transform: translateY 表示：
+  - 使用 CSS Flexbox，响应式均分宽度
+- [x] 电梯在方块间的位置用绝对定位表示：
   - 根据 `elevator.currentFloor` 和 `floorCount` 计算出 Y 位置
-  - 楼层 1 在最下方
-- [ ] **验证**：页面能看到电梯方块，点击楼层按钮能触发 API
+  - 楼层 1 在最下方；含 tick 间平滑偏移（MoveRemainingTicks）
+- [x] **验证**：页面能看到电梯方块，点击楼层按钮能触发 API
 
 ### 第 4 步：电梯移动和颜色
 
