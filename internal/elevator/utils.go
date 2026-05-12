@@ -100,3 +100,14 @@ func isSameStop(a StopPlan, b StopPlan) bool {
 		a.Reason == b.Reason &&
 		a.Direction == b.Direction
 }
+
+// sortElevatorStops 按 ScanDirection 排序电梯的停靠计划。
+// 上行时低楼层排前面；下行时高楼层排前面。
+func sortElevatorStops(e *Elevator) {
+	sort.SliceStable(e.Stops, func(i, j int) bool {
+		if e.ScanDirection == DirectionDown {
+			return e.Stops[i].Floor > e.Stops[j].Floor
+		}
+		return e.Stops[i].Floor < e.Stops[j].Floor
+	})
+}

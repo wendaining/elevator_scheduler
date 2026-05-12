@@ -69,16 +69,20 @@ func NewSystem(sc SystemConfig) (*System, error) {
 }
 
 // AddRequest 向系统添加一个新的乘梯请求。校验参数后创建请求并写入 Requests map。
-// 返回指向该请求的指针；调用方可以在锁外安全读取该指针，因为 Request 字段在创建后
-// 只会被 Step 修改（通过 completeRequest），而 Step 和 AddRequest 有各自的锁边界。
-func (s *System) AddRequest(floor int, direction Direction, kind RequestKind) (*Request, error) {
+//
+// elevatorID 仅对 cabin 请求有意义，表示请求来自哪部电梯（1-based）。
+// hall 请求应传 0。
+//
+// cabin 请求不会进入 pending 状态，而是在此方法内直接分配给对应电梯。
+// 这样所有调度器都永远看不到 cabin 请求，cabin 请求不可能被分配给错误的电梯。
+func (s *System) AddRequest(floor int, direction Direction, kind RequestKind, elevatorID int) (*Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.addRequestLocked(floor, direction, kind)
+	return s.addRequestLocked(floor, direction, kind, elevatorID)
 }
 
-func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKind) (*Request, error) {
+func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKind, elevatorID int) (*Request, error) {
 	if floor < 1 || floor > s.FloorCount {
 		return nil, fmt.Errorf("floor must be between 1 and %d, got %d", s.FloorCount, floor)
 	}
@@ -88,13 +92,21 @@ func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKi
 	if !IsValidRequestKind(kind) {
 		return nil, fmt.Errorf("kind must be hall or cabin, got %s", kind)
 	}
+	if kind == RequestKindCabin {
+		if elevatorID < 1 || elevatorID > len(s.Elevators) {
+			return nil, fmt.Errorf("cabin request must specify a valid elevator ID between 1 and %d, got %d", len(s.Elevators), elevatorID)
+		}
+	} else {
+		elevatorID = 0
+	}
 
 	request := Request{
 		ID:                 s.nextRequestID,
 		Floor:              floor,
 		Direction:          direction,
 		Kind:               kind,
-		Status:             RequestPending, // 默认状态是 pending，等待调度器分配
+		Status:             RequestPending,
+		ElevatorID:         elevatorID,
 		CreatedTick:        s.CurrentTick,
 		AssignedTick:       0,
 		CompletedTick:      0,
@@ -103,13 +115,21 @@ func (s *System) addRequestLocked(floor int, direction Direction, kind RequestKi
 	s.Requests[request.ID] = &request
 	s.nextRequestID++
 	log.Printf(
-		"request created: id=%d floor=%d direction=%s kind=%s tick=%d",
+		"request created: id=%d floor=%d direction=%s kind=%s elevator=%d tick=%d",
 		request.ID,
 		request.Floor,
 		request.Direction,
 		request.Kind,
+		request.ElevatorID,
 		request.CreatedTick,
 	)
+
+	// cabin 请求直接分配给指定电梯，不进入 pending。
+	if kind == RequestKindCabin {
+		s.assignRequestToElevator(request.ID, elevatorID-1)
+		sortElevatorStops(&s.Elevators[elevatorID-1])
+	}
+
 	return s.Requests[request.ID], nil
 }
 

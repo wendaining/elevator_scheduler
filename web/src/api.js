@@ -33,15 +33,16 @@ export async function fetchState() {
 
 /**
  * 创建一个乘梯请求。
- * @param {number} floor    — 目标楼层
- * @param {string} direction — "up" | "down" | "idle"
- * @param {string} kind      — "hall" | "cabin"
+ * @param {number} floor      — 目标楼层
+ * @param {string} direction   — "up" | "down" | "idle"
+ * @param {string} kind        — "hall" | "cabin"
+ * @param {number} elevatorId  — cabin 请求的电梯 ID（hall 请求传 0 或不传）
  */
-export async function createRequest(floor, direction, kind) {
+export async function createRequest(floor, direction, kind, elevatorId = 0) {
   const response = await fetch(`${BASE}/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ floor, direction, kind }),
+    body: JSON.stringify({ floor, direction, kind, elevatorId }),
   })
   if (!response.ok) {
     const text = await response.text()

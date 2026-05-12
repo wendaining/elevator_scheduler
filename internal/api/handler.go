@@ -168,12 +168,12 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := validateCreateRequestPayload(payload, s.System.FloorCount); err != nil {
+	if err := validateCreateRequestPayload(payload, s.System.FloorCount, len(s.System.Elevators)); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	req, err := s.System.AddRequest(payload.Floor, payload.Direction, payload.Kind)
+	req, err := s.System.AddRequest(payload.Floor, payload.Direction, payload.Kind, payload.ElevatorID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -288,13 +288,14 @@ func (s *Server) handleElevatorCount(w http.ResponseWriter, r *http.Request) {
 
 // createRequestPayload 是 POST /api/request 接收的请求体。
 type createRequestPayload struct {
-	Floor     int                  `json:"floor"`
-	Direction elevator.Direction   `json:"direction"`
-	Kind      elevator.RequestKind `json:"kind"`
+	Floor      int                  `json:"floor"`
+	Direction  elevator.Direction   `json:"direction"`
+	Kind       elevator.RequestKind `json:"kind"`
+	ElevatorID int                  `json:"elevatorId"`
 }
 
 // validateCreateRequestPayload 检查客户端提交的新请求是否合法。
-func validateCreateRequestPayload(payload createRequestPayload, floorCount int) error {
+func validateCreateRequestPayload(payload createRequestPayload, floorCount int, elevatorCount int) error {
 	if payload.Floor < 1 || payload.Floor > floorCount {
 		return fmt.Errorf("floor must be between 1 and %d, got %d", floorCount, payload.Floor)
 	}
@@ -309,6 +310,11 @@ func validateCreateRequestPayload(payload createRequestPayload, floorCount int) 
 	}
 	if payload.Kind == elevator.RequestKindCabin && payload.Direction != elevator.DirectionIdle {
 		return errors.New("cabin request direction must be idle")
+	}
+	if payload.Kind == elevator.RequestKindCabin {
+		if payload.ElevatorID < 1 || payload.ElevatorID > elevatorCount {
+			return fmt.Errorf("cabin request elevatorId must be between 1 and %d, got %d", elevatorCount, payload.ElevatorID)
+		}
 	}
 	return nil
 }

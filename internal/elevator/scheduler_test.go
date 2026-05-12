@@ -43,7 +43,7 @@ func TestFCFSSchedulerSkipsBusyAndEmergencyElevators(t *testing.T) {
 	}
 	system.Elevators[1].EmergencyStop = true
 
-	request, err := system.AddRequest(6, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(6, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestFirstAvailableSchedulerLeavesRequestPendingWhenFirstElevatorBusy(t *tes
 	system.Elevators[0].Stops = []StopPlan{
 		{Floor: 8, Reason: StopReasonCabin, Direction: DirectionIdle, RequestIDs: []int64{99}},
 	}
-	request, err := system.AddRequest(6, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(6, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -85,11 +85,11 @@ func TestDuplicateRequestsCanShareSameStopPlan(t *testing.T) {
 		t.Fatalf("SetScheduler returned error: %v", err)
 	}
 
-	first, err := system.AddRequest(5, DirectionUp, RequestKindHall)
+	first, err := system.AddRequest(5, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("first AddRequest returned error: %v", err)
 	}
-	second, err := system.AddRequest(5, DirectionUp, RequestKindHall)
+	second, err := system.AddRequest(5, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("second AddRequest returned error: %v", err)
 	}

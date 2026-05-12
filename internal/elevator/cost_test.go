@@ -73,7 +73,7 @@ func TestBestIdleAssignmentCandidateChoosesLowestCostElevator(t *testing.T) {
 	system.Elevators[1].CurrentFloor = 8
 	system.Elevators[2].CurrentFloor = 12
 
-	request, err := system.AddRequest(9, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(9, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestNearestIdleSchedulerUsesCostCandidate(t *testing.T) {
 	system.Elevators[1].CurrentFloor = 8
 	system.Elevators[2].CurrentFloor = 12
 
-	request, err := system.AddRequest(9, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(9, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}

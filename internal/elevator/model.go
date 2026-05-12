@@ -63,6 +63,9 @@ type Request struct {
 	Direction Direction     `json:"direction"`
 	Kind      RequestKind   `json:"kind"`
 	Status    RequestStatus `json:"status"`
+	// ElevatorID 仅对 cabin 请求有意义：表示这个请求来自哪部电梯。
+	// hall 请求的 ElevatorID 始终为 0。
+	ElevatorID int `json:"elevatorId"`
 
 	// CreatedTick 记录请求是在第几个系统时间片创建的。
 	CreatedTick        int `json:"createdTick"`

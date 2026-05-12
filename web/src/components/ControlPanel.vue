@@ -221,7 +221,7 @@ async function submitCabinRequest() {
 
   submittingCabin.value = true
   try {
-    await createRequest(cabinFloor.value, 'idle', 'cabin')
+    await createRequest(cabinFloor.value, 'idle', 'cabin', props.selectedElevatorId)
     appendLog(`#${selectedElevator.value.id} cabin 请求：${cabinFloor.value} 楼`)
     emit('clear-selection')
   } catch (err) {

@@ -21,7 +21,7 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 	}
 	startElevatorRunnersForTest(t, system)
 
-	request, err := system.AddRequest(4, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(4, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	}
 	startElevatorRunnersForTest(t, system)
 
-	request, err := system.AddRequest(2, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(2, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 	}
 	startElevatorRunnersForTest(t, system)
 
-	request, err := system.AddRequest(2, DirectionUp, RequestKindHall)
+	request, err := system.AddRequest(2, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestAddRequestRejectsInvalidFloors(t *testing.T) {
 
 	invalidFloors := []int{0, 21}
 	for _, floor := range invalidFloors {
-		if _, err := system.AddRequest(floor, DirectionUp, RequestKindHall); err == nil {
+		if _, err := system.AddRequest(floor, DirectionUp, RequestKindHall, 0); err == nil {
 			t.Fatalf("AddRequest floor %d returned nil error, want error", floor)
 		}
 	}
@@ -220,11 +220,11 @@ func TestAddRequestAcceptsBoundaryFloors(t *testing.T) {
 	}
 	defer system.Close()
 
-	firstFloorRequest, err := system.AddRequest(1, DirectionUp, RequestKindHall)
+	firstFloorRequest, err := system.AddRequest(1, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest first floor returned error: %v", err)
 	}
-	topFloorRequest, err := system.AddRequest(20, DirectionDown, RequestKindHall)
+	topFloorRequest, err := system.AddRequest(20, DirectionDown, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest top floor returned error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 		t.Fatalf("NewSystemWithDatabase returned error: %v", err)
 	}
 	startElevatorRunnersForTest(t, firstSystem)
-	request, err := firstSystem.AddRequest(2, DirectionUp, RequestKindHall)
+	request, err := firstSystem.AddRequest(2, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("AddRequest returned error: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestNewSystemWithDatabaseContinuesRequestIDAfterRestart(t *testing.T) {
 	}
 	defer secondSystem.Close()
 
-	nextRequest, err := secondSystem.AddRequest(3, DirectionUp, RequestKindHall)
+	nextRequest, err := secondSystem.AddRequest(3, DirectionUp, RequestKindHall, 0)
 	if err != nil {
 		t.Fatalf("second AddRequest returned error: %v", err)
 	}
@@ -396,5 +396,70 @@ func TestStopPlanKeepsSameFloorDifferentReasonsSeparate(t *testing.T) {
 	}
 	if elevator.Stops[1].Reason != StopReasonHallDown {
 		t.Fatalf("second stop reason = %q, want %q", elevator.Stops[1].Reason, StopReasonHallDown)
+	}
+}
+
+func TestCabinRequestAssignedImmediatelyToCorrectElevator(t *testing.T) {
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    5,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+	defer system.Close()
+
+	// 模拟：3 号电梯在 17 楼，乘客按下 4 楼。
+	system.Elevators[2].CurrentFloor = 17
+	req, err := system.AddRequest(4, DirectionIdle, RequestKindCabin, 3)
+	if err != nil {
+		t.Fatalf("AddRequest returned error: %v", err)
+	}
+
+	// cabin 请求应立刻分配，不能是 pending。
+	if req.Status != RequestAssigned {
+		t.Fatalf("cabin request status = %q, want %q", req.Status, RequestAssigned)
+	}
+	if req.AssignedElevatorID != 3 {
+		t.Fatalf("cabin request assigned to elevator %d, want 3", req.AssignedElevatorID)
+	}
+
+	// 3 号电梯应有此停靠。
+	elevator := system.Elevators[2]
+	found := false
+	for _, stop := range elevator.Stops {
+		if stop.Floor == 4 && stop.Reason == StopReasonCabin {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("elevator 3 stops = %v, should contain a stop at floor 4 for cabin", elevator.Stops)
+	}
+}
+
+func TestCabinRequestRejectsInvalidElevatorID(t *testing.T) {
+	system, err := NewSystem(SystemConfig{
+		Floors:           20,
+		ElevatorCount:    3,
+		TicksPerFloor:    1,
+		DoorBaseTicks:    2,
+		TickPerPassenger: 1,
+		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+	})
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+	defer system.Close()
+
+	invalidIDs := []int{0, 4}
+	for _, id := range invalidIDs {
+		if _, err := system.AddRequest(5, DirectionIdle, RequestKindCabin, id); err == nil {
+			t.Fatalf("AddRequest cabin with elevator ID %d returned nil error, want error", id)
+		}
 	}
 }
