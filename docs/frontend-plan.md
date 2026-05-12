@@ -31,15 +31,15 @@
 
 ### 第 2 步：建立 API 通信层
 
-- [ ] 创建 `src/api.js`，封装所有后端 API 调用：
+- [x] 创建 `src/api.js`，封装所有后端 API 调用：
   - `fetchState()` → `GET /api/state`（轮询用，每 500ms 调一次，与后端 tick 间隔一致）
   - `createRequest(floor, direction, kind)` → `POST /api/request`
   - `setScheduler(name)` → `POST /api/scheduler`
   - `setFloorCount(n)` → `POST /api/floor-count`
   - `setElevatorCount(n)` → `POST /api/elevator-count`
-- [ ] 在 `App.vue` 的 `onMounted` 中开始轮询 `fetchState`，用 `setInterval`
-- [ ] 整个应用的状态由 `fetchState` 的返回值驱动，通过 Vue 的 `provide`/`inject` 或 `props` 向下传递
-- [ ] **验证**：浏览器 Console 能看到 state JSON
+- [x] 在 `App.vue` 的 `onMounted` 中开始轮询 `fetchState`，用 `setInterval`
+- [x] 整个应用的状态由 `fetchState` 的返回值驱动，通过 Vue 的 `provide` 向下传递
+- [x] **验证**：浏览器 Console 能看到 state JSON
 
 ### 第 3 步：左侧电梯可视化区域
 

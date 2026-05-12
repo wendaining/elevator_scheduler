@@ -90,3 +90,79 @@ npx vite                # Vite 在 localhost:5173 启动，224ms 就绪
 ```
 
 Go 后端编译不受影响（`go build ./...` 通过）。
+
+## 2026-05-12：建立 API 通信层（计划第 2 步）
+
+本阶段目标：封装所有后端 API 调用，在 App.vue 中建立轮询机制和状态管理。
+
+### 新增文件
+
+- `web/src/api.js` — API 封装模块
+
+### api.js 结构
+
+```js
+const BASE = '/api'
+
+fetchState()          → GET  /api/state        // 轮询全量状态
+createRequest(f, d, k) → POST /api/request      // 创建乘梯请求
+setScheduler(name)    → POST /api/scheduler     // 切换调度算法
+setFloorCount(n)      → POST /api/floor-count   // 设置楼层数
+setElevatorCount(n)   → POST /api/elevator-count // 设置电梯数
+```
+
+每个函数返回 Promise，调用方用 `await` 获取结果。错误时抛出带描述信息的 Error。
+
+### App.vue 的轮询机制
+
+```js
+import { ref, provide, onMounted, onUnmounted } from 'vue'
+
+const state = ref(null)   // 响应式状态
+let timer = null
+
+onMounted(() => {
+  tick()                        // 立即获取一次
+  timer = setInterval(tick, 500) // 然后每 500ms 轮询
+})
+
+onUnmounted(() => {
+  clearInterval(timer)  // 组件卸载时停止轮询
+})
+
+async function tick() {
+  state.value = await fetchState()
+}
+
+provide('state', state)  // 后代组件 inject('state') 即可获取
+```
+
+### Vue 3 概念：ref、provide/inject、onMounted/onUnmounted
+
+**`ref(value)`** — 创建一个响应式引用。`.value` 读写值。模板中自动解包（直接写 `state` 不用 `.value`）。
+
+**`provide(key, value)` / `inject(key)`** — 祖先组件 provide 数据，任意后代组件 inject 获取。比 props 一层层传递更简洁，适合全局状态。
+
+**`onMounted(fn)` / `onUnmounted(fn)`** — 组件挂载到 DOM 后执行 / 组件从 DOM 移除前执行。这里用于启动和停止轮询。
+
+### 布局占位
+
+App.vue 的 template 做了左右分栏：
+
+```html
+<div class="layout">
+  <div class="main-area"><!-- 左侧 75%，第 3 步放电梯可视化 --></div>
+  <div class="side-panel"><!-- 右侧 25%，第 5 步放配置面板 --></div>
+</div>
+```
+
+当前 main-area 显示一行占位文字（楼层数 / 电梯数 / tick），证明 state 已经正常流入组件。
+
+### 后端运行方式
+
+由于 Vite dev server 配置了 proxy，开发时访问 `localhost:5173` 即可——`/api/*` 请求会自动转发到 `localhost:8080` 的 Go 后端。不需要手动处理 CORS。
+
+### 验证结果
+
+- `npx vite` 启动正常
+- 启动 `go run ./cmd/server` 后，浏览器 Console 可看到 `fetchState()` 返回的 JSON 对象
