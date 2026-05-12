@@ -20,7 +20,7 @@ func main() {
 		defaultAutoStepInterval = 250 * time.Millisecond
 	)
 
-	dbPath := fmt.Sprintf("data/requests_%d.db", time.Now().Unix())
+	dbPath := fmt.Sprintf("data/requests_%de_%df_scan_%d.db", defaultElevatorCount, defaultFloorCount, time.Now().Unix())
 
 	config := elevator.SystemConfig{
 		Floors:           defaultFloorCount,

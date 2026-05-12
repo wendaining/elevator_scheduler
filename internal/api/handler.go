@@ -59,7 +59,7 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int, schedulerNam
 	newConfig := s.config
 	newConfig.Floors = floorCount
 	newConfig.ElevatorCount = elevatorCount
-	newConfig.DatabasePath = fmt.Sprintf("data/requests_%d.db", time.Now().Unix())
+	newConfig.DatabasePath = fmt.Sprintf("data/requests_%de_%df_%s_%d.db", elevatorCount, floorCount, schedulerName, time.Now().Unix())
 	newSystem, err := elevator.NewSystem(newConfig)
 	if err != nil {
 		return err
