@@ -1,0 +1,30 @@
+services:
+  backend:
+    image: golang:1.26.2-bookworm
+    working_dir: /app
+    command: sh -c "go run ./cmd/server"
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+
+  frontend:
+    image: node:22-bookworm
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8080
+    volumes:
+      - ./web:/app
+      - web-node-modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  go-build-cache:
+  go-mod-cache:
+  web-node-modules:

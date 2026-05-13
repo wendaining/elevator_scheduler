@@ -7,8 +7,9 @@ export default defineConfig({
     outDir: 'dist',
   },
   server: {
+    host: '0.0.0.0',
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': process.env.VITE_API_PROXY_TARGET || 'http://localhost:8080',
     },
   },
 })
