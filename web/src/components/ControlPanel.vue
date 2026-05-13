@@ -74,17 +74,7 @@
       <div v-if="selectedElevator" class="cabin-card">
         <div class="cabin-selected">
           <span>已选中</span>
-          <div class="cabin-selected-actions">
-            <strong>#{{ selectedElevator.id }}</strong>
-            <button
-              class="emergency-button"
-              :class="{ active: selectedElevator.emergencyStop }"
-              :disabled="submittingEmergency"
-              type="button"
-              aria-label="触发报警"
-              @click="submitEmergency"
-            />
-          </div>
+          <strong>#{{ selectedElevator.id }}</strong>
         </div>
         <div class="field">
           <div class="field-header">
@@ -107,6 +97,15 @@
         >
           发送 Cabin 请求
         </el-button>
+        <button
+          class="emergency-button full-width"
+          :class="{ active: selectedElevator.emergencyStop }"
+          :disabled="submittingEmergency"
+          type="button"
+          @click="submitEmergency"
+        >
+          紧急制动
+        </button>
       </div>
       <div v-else class="empty-cabin">
         点击电梯顶部标签以发起轿厢内请求
@@ -380,31 +379,38 @@ async function submitEmergency() {
   color: #1f5f99;
 }
 
-.cabin-selected-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .emergency-button {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 2px solid #991b1b;
+  height: 46px;
+  margin-top: 10px;
+  border: 1px solid #991b1b;
+  border-radius: 6px;
   background: #dc2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.16);
   cursor: pointer;
-  flex: 0 0 auto;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .emergency-button:hover:not(:disabled) {
   background: #b91c1c;
   transform: translateY(-1px);
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 8px 18px rgba(220, 38, 38, 0.18);
 }
 
 .emergency-button.active {
   background: #7f1d1d;
-  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.24);
+  border-color: #7f1d1d;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.25),
+    0 0 0 3px rgba(220, 38, 38, 0.16);
 }
 
 .emergency-button:disabled {
