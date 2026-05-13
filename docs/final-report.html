@@ -15,6 +15,12 @@
       --accent-soft: #eaf3ff;
       --code: #101827;
       --danger: #b91c1c;
+      --font-song: "Times New Roman", "SimSun", "Songti SC", serif;
+      --font-hei: "Times New Roman", "SimHei", "Heiti SC", sans-serif;
+      --font-mono: "Times New Roman", "SimSun", "Songti SC", serif;
+      --size-sihao: 14pt;
+      --size-wuhao: 10.5pt;
+      --line-report: 18pt;
     }
 
     * {
@@ -25,8 +31,9 @@
       margin: 0;
       color: var(--ink);
       background: #eef2f7;
-      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
-      line-height: 1.75;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .page {
@@ -47,15 +54,16 @@
 
     .cover .school {
       color: var(--muted);
-      font-size: 15px;
+      font-size: var(--size-wuhao);
       letter-spacing: 0.08em;
       margin-bottom: 24px;
     }
 
     h1 {
       margin: 0;
-      font-size: 34px;
-      line-height: 1.35;
+      font-family: var(--font-hei);
+      font-size: 18pt;
+      line-height: 24pt;
       letter-spacing: 0.02em;
       font-weight: 800;
     }
@@ -63,7 +71,9 @@
     .subtitle {
       margin-top: 14px;
       color: var(--muted);
-      font-size: 18px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .meta {
@@ -73,7 +83,7 @@
       width: min(640px, 100%);
       margin: 34px auto 0;
       text-align: left;
-      font-size: 15px;
+      font-size: var(--size-wuhao);
     }
 
     .meta div {
@@ -98,7 +108,9 @@
     .abstract h2,
     .toc h2 {
       margin: 0 0 8px;
-      font-size: 18px;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .keywords {
@@ -119,37 +131,67 @@
     }
 
     h2.section {
-      margin: 44px 0 18px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--line);
-      font-size: 25px;
-      line-height: 1.35;
+      margin: 9pt 0;
+      padding: var(--line-report) 0 0;
+      border-bottom: none;
+      font-family: var(--font-hei);
+      font-size: var(--size-sihao);
+      line-height: var(--line-report);
+      font-weight: 700;
+      text-align: center;
+      break-before: page;
+      page-break-before: always;
     }
 
     h3 {
-      margin: 28px 0 10px;
-      font-size: 19px;
-      line-height: 1.45;
+      margin: 9pt 0;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
+      font-weight: 700;
+      text-align: left;
     }
 
     h4 {
-      margin: 20px 0 8px;
-      font-size: 16px;
+      margin: 0;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
+      font-weight: 700;
+      text-indent: 2em;
+    }
+
+    h5,
+    h6 {
+      margin: 0;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
+      font-weight: 700;
+      text-indent: 2em;
     }
 
     p {
-      margin: 8px 0 12px;
+      margin: 0;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
       text-align: justify;
+      text-indent: 2em;
     }
 
     ul,
     ol {
-      margin: 8px 0 14px;
+      margin: 0 0 0 2em;
       padding-left: 26px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     li {
-      margin: 4px 0;
+      margin: 0;
+      text-align: justify;
     }
 
     code {
@@ -157,8 +199,8 @@
       border-radius: 4px;
       color: #0f172a;
       background: #eef2f7;
-      font-family: "JetBrains Mono", "Consolas", monospace;
-      font-size: 0.92em;
+      font-family: var(--font-mono);
+      font-size: var(--size-wuhao);
     }
 
     pre {
@@ -168,16 +210,18 @@
       color: #dbeafe;
       background: var(--code);
       border-radius: 6px;
-      font-family: "JetBrains Mono", "Consolas", monospace;
-      font-size: 13px;
-      line-height: 1.65;
+      font-family: var(--font-mono);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
       margin: 14px 0 20px;
-      font-size: 14px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     th,
@@ -191,6 +235,7 @@
       background: var(--soft);
       text-align: left;
       font-weight: 700;
+      font-family: var(--font-hei);
     }
 
     .figure {
@@ -213,7 +258,9 @@
     .figure figcaption {
       margin-top: 10px;
       color: var(--muted);
-      font-size: 13px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
       text-align: center;
     }
 
@@ -221,6 +268,16 @@
       display: block;
       max-width: 100%;
       max-height: 420px;
+      margin: 0 auto;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .chart-image {
+      display: block;
+      width: 100%;
+      max-height: 520px;
       margin: 0 auto;
       object-fit: contain;
       border: 1px solid var(--line);
@@ -270,8 +327,8 @@
       right: -17px;
       width: 16px;
       color: #547798;
-      font-family: "JetBrains Mono", "Consolas", monospace;
-      font-size: 18px;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
       line-height: 1;
       transform: translateY(-50%);
     }
@@ -282,22 +339,24 @@
 
     .arch-node .tag {
       color: #64748b;
-      font-family: "JetBrains Mono", "Consolas", monospace;
-      font-size: 11px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
 
     .arch-node strong {
       color: var(--accent);
-      font-size: 16px;
-      line-height: 1.25;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .arch-node span {
       color: var(--muted);
-      font-size: 12px;
-      line-height: 1.45;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .arch-node.frontend {
@@ -324,7 +383,7 @@
       display: block;
       width: 100%;
       height: auto;
-      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+      font-family: var(--font-song);
     }
 
     .mermaid-flow .node {
@@ -368,21 +427,23 @@
 
     .mermaid-flow .label {
       fill: #172033;
-      font-size: 17px;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
       font-weight: 700;
       text-anchor: middle;
     }
 
     .mermaid-flow .sub {
       fill: #596579;
-      font-size: 13px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
       text-anchor: middle;
     }
 
     .mermaid-flow .edge-label {
       fill: #475569;
-      font-size: 12px;
-      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: var(--size-wuhao);
+      font-family: var(--font-song);
       text-anchor: middle;
     }
 
@@ -390,7 +451,7 @@
       display: block;
       width: 100%;
       height: auto;
-      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+      font-family: var(--font-song);
     }
 
     .architecture-svg .zone {
@@ -440,29 +501,31 @@
 
     .architecture-svg .title {
       fill: #172033;
-      font-size: 17px;
+      font-family: var(--font-hei);
+      font-size: var(--size-wuhao);
       font-weight: 700;
       text-anchor: middle;
     }
 
     .architecture-svg .desc {
       fill: #596579;
-      font-size: 12px;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
       text-anchor: middle;
     }
 
     .architecture-svg .zone-label {
       fill: #64748b;
-      font-size: 13px;
-      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: var(--size-wuhao);
+      font-family: var(--font-song);
       letter-spacing: 0.05em;
       text-anchor: middle;
     }
 
     .architecture-svg .edge-label {
       fill: #475569;
-      font-size: 12px;
-      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: var(--size-wuhao);
+      font-family: var(--font-song);
       text-anchor: middle;
     }
 
@@ -473,10 +536,14 @@
       border-left: 4px solid #b45309;
       background: #fffbeb;
       color: #513a11;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .todo-box strong {
       color: #92400e;
+      font-family: var(--font-hei);
     }
 
     .note {
@@ -485,6 +552,9 @@
       border-left: 4px solid #94a3b8;
       background: #f8fafc;
       color: #334155;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .quote {
@@ -493,6 +563,9 @@
       border-left: 4px solid var(--accent);
       background: #f8fafc;
       color: #334155;
+      font-family: var(--font-song);
+      font-size: var(--size-wuhao);
+      line-height: var(--line-report);
     }
 
     .danger {
@@ -502,7 +575,7 @@
 
     .route {
       white-space: nowrap;
-      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-family: var(--font-mono);
     }
 
     @media print {
@@ -519,7 +592,13 @@
       }
 
       h2.section {
-        page-break-before: auto;
+        break-before: page;
+        page-break-before: always;
+      }
+
+      .cover + .abstract + .toc + h2.section {
+        break-before: page;
+        page-break-before: always;
       }
     }
 
@@ -1396,8 +1475,74 @@ assign best request to best elevator</code></pre>
     <p>cost 函数不单独属于某个算法，而是调度器比较候选时的共同工具。Nearest Idle 使用它在空闲电梯之间做选择；SCAN 和 LOOK 使用它在“所有 pending 请求 × 所有可行电梯”的组合中做选择。这样调度策略和评分维度分开，后续如果要加入容量、能耗或更复杂的等待惩罚，也可以集中修改评分函数。</p>
 
     <h3>3.6 算法对比</h3>
-    <p>项目已经具备算法对比的数据链路：后端会把完成请求写入 SQLite，<code>scripts/compare_charts.py</code> 可以读取不同调度器对应的数据库文件，并生成统计表和图表。但当前已有数据样本数不一致，不适合作为最终报告中的严格性能结论。</p>
-    <div class="todo-box"><strong>TODO：</strong>后续重新生成公平对比实验。要求使用同一组请求序列分别运行 First Available、FCFS、Nearest Idle、SCAN 和 LOOK，保证每种算法完成相同数量的请求，再补充平均等待 tick、P95 等待 tick、平均总耗时、P95 总耗时、最大总耗时等指标，并把新的图表替换到本节。</div>
+    <p>在 20 层、5 部电梯的配置下，分别切换到五种调度器，并提交完全相同的 101 个请求负载；负载覆盖低层大量上行、高层下行、中层双向混合、同层多请求和 cabin 请求。每种算法的完成请求写入独立 SQLite 数据库，图表和汇总结果如下：</p>
+    <table>
+      <thead>
+        <tr>
+          <th>调度器</th>
+          <th>完成请求数</th>
+          <th>平均等待 tick</th>
+          <th>等待 P95</th>
+          <th>平均总耗时 tick</th>
+          <th>总耗时第 95 百分位数</th>
+          <th>最大总耗时</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>FCFS</td>
+          <td>101</td>
+          <td>128.9</td>
+          <td>270.0</td>
+          <td>148.3</td>
+          <td>282.0</td>
+          <td>294</td>
+        </tr>
+        <tr>
+          <td>First Available</td>
+          <td>101</td>
+          <td>282.7</td>
+          <td>639.0</td>
+          <td>296.1</td>
+          <td>647.0</td>
+          <td>676</td>
+        </tr>
+        <tr>
+          <td>LOOK</td>
+          <td>101</td>
+          <td>37.9</td>
+          <td>115.0</td>
+          <td>69.8</td>
+          <td>163.0</td>
+          <td>185</td>
+        </tr>
+        <tr>
+          <td>Nearest Idle</td>
+          <td>101</td>
+          <td>130.9</td>
+          <td>273.0</td>
+          <td>150.1</td>
+          <td>284.0</td>
+          <td>293</td>
+        </tr>
+        <tr>
+          <td>SCAN</td>
+          <td>101</td>
+          <td>37.9</td>
+          <td>115.0</td>
+          <td>69.8</td>
+          <td>163.0</td>
+          <td>185</td>
+        </tr>
+      </tbody>
+    </table>
+    <figure class="figure">
+      <img class="chart-image" src="../analysis/compare_bar.png" alt="五种调度算法平均等待、平均总耗时和第 95 百分位数指标对比图">
+      <figcaption>图 3-2 五种调度算法的平均耗时与第 95 百分位数耗时对比</figcaption>
+    </figure>
+    <p>从完成请求数看，五种算法都完成了 101 个请求，因此本组数据具备横向比较基础。First Available 的平均等待达到 282.7 tick，P95 等待达到 639.0 tick，是本组实验中表现最差的策略；原因在于它只选择编号靠前的可用电梯，不考虑距离、方向和已有任务分布，容易造成负载不均衡。FCFS 和 Nearest Idle 的平均等待分别为 128.9 和 130.9 tick，明显好于 First Available，但二者仍主要围绕“空闲电梯接单”展开，对运行中电梯的顺路追加利用不足，因此在高并发请求下仍会出现较长等待队列。</p>
+    <p>SCAN 和 LOOK 的表现明显更好，平均等待均为 37.9 tick，平均总耗时均为 69.8 tick；相对于 FCFS，平均等待降低约 70.6%，平均总耗时降低约 52.9%。这说明“沿方向连续服务、允许运行中电梯追加顺路请求”的设计更适合本项目的混合请求负载。它减少了电梯频繁掉头和空闲等待，也能把同方向、同楼层附近的请求聚合到同一条运行路径上处理。</p>
+    <p>本组数据中 SCAN 与 LOOK 指标完全相同，说明当前请求序列没有明显触发二者在“是否空跑到边界再反向”上的差异。报告中的算法选择仍保留 LOOK 的设计意义：在更稀疏或更偏向局部楼层的请求负载下，LOOK 可以在当前方向没有后续请求时提前反向，理论上比传统 SCAN 更少无效移动；而 SCAN 更适合作为经典电梯算法的基准实现。</p>
 
     <h2 class="section">4. Go 并发模型</h2>
 
@@ -1540,7 +1685,7 @@ type elevatorTickResult struct {
 
     <p>本项目完成了一个可运行、可观察、可扩展的电梯调度算法可视化系统。后端使用 Go 标准库实现 HTTP API，使用统一的 <code>System</code> 模型维护电梯、请求、停靠计划和全局 tick；调度层实现了 First Available、FCFS、Nearest Idle、SCAN 和 LOOK；并发层用每部电梯一个 goroutine 的方式体现独立执行单元；前端使用 Vue 3 + Element Plus + Vite 展示楼层、电梯、控制面板和日志；持久化层使用 SQLite 保存完成请求，为算法实验提供数据来源。</p>
     <p>从操作系统学习角度看，本项目把多个课程概念连接在了一起：调度算法对应请求分配策略，goroutine 和 channel 对应并发执行与通信，mutex 和 race detector 对应共享状态保护，HTTP API 和前端轮询对应系统状态的可视化观察。通过先实现同步模型、再逐步加入调度器、持久化、前端和并发模型，可以更清楚地看到工程复杂度是如何一步步产生的。</p>
-    <p>后续可改进方向主要包括三点：第一，补齐严格公平的算法对比实验，使用同一请求序列评估五种算法；第二，继续完善乘客容量、上下客耗时和楼层客流模型，让模拟更接近真实电梯；第三，增强前端展示，例如增加算法轨迹回放、请求等待时间标注和历史统计面板。</p>
+    <p>后续可改进方向主要包括三点：第一，扩展更多算法实验负载，例如午间双向流动、稀疏随机请求和突发高峰请求，并进行多轮重复实验；第二，继续完善乘客容量、上下客耗时和楼层客流模型，让模拟更接近真实电梯；第三，增强前端展示，例如增加算法轨迹回放、请求等待时间标注和历史统计面板。</p>
 
     <h2 class="section">附录</h2>
 
@@ -1639,7 +1784,7 @@ npm run build</code></pre>
 ├── img/                 # README 和报告使用的图片资源
 └── docker-compose.yml   # Docker Compose 启动配置</code></pre>
 
-    <div class="note">截至本报告当前版本，HTML 内容已完成项目概述、系统设计与实现、调度算法、Go 并发模型、总结和附录。算法对比实验仍保留 TODO，等待后续补充公平样本数据。</div>
+    <div class="note">截至本报告当前版本，HTML 内容已完成项目概述、系统设计与实现、调度算法、Go 并发模型、总结和附录。算法对比实验已根据 <code>analysis/</code> 下的统计结果和图表补充。</div>
   </main>
 </body>
 </html>
