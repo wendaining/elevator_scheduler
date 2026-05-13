@@ -49,3 +49,5 @@ web/.vite/
 .claude/
 .codex/
 .agent/
+
+*.db
