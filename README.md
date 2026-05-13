@@ -4,6 +4,8 @@
 
 实现一个电梯调度系统，支持多种调度算法（FCFS、SCAN、LOOK、First Available、Nearest Idle），并提供 Web 前端可视化展示电梯运行状态。
 
+<img src="./img/readme-show.png" style="zoom:50%;" />
+
 ## 技术栈
 
 - 后端：Go（标准库 `net/http`）
