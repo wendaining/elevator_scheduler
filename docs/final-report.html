@@ -248,6 +248,37 @@
       line-height: 1.45;
     }
 
+    .flow-diagram {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      min-height: 96px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      padding: 12px;
+      border: 1px solid #b9d5ef;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      text-align: center;
+    }
+
+    .flow-step strong {
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .flow-step span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
     .note {
       margin: 14px 0;
       padding: 12px 14px;
@@ -300,7 +331,8 @@
       }
 
       .meta,
-      .layer-diagram {
+      .layer-diagram,
+      .flow-diagram {
         grid-template-columns: 1fr;
       }
     }
@@ -331,6 +363,7 @@
       <ol>
         <li>项目概述</li>
         <li>系统设计与实现</li>
+        <li>调度算法</li>
       </ol>
     </nav>
 
@@ -707,11 +740,267 @@ Content-Type: application/json
         </tr>
       </tbody>
     </table>
-    <p>当前验证命令如下，两项均已通过：</p>
+    <p>每次修改后端代码都会验证测试：</p>
     <pre><code>go test ./...
 go test -race ./...</code></pre>
 
-    <div class="note">截至本报告当前版本，HTML 内容只完成第 1 章和第 2 章。后续章节将继续补充调度算法、Go 并发模型和总结。</div>
+    <h2 class="section">3. 调度算法</h2>
+    <!-- TODO: 给这些调度算法补充中文名 -->
+    <p>调度算法是本项目最核心的部分。系统把乘客请求抽象成 <code>Request</code>，把每部电梯抽象成可执行资源，调度器负责在每个 tick 开始时从 pending 请求中挑选一个可行分配，并把请求转换成对应电梯的 <code>StopPlan</code>。当前系统实现了 First Available、FCFS、Nearest Idle、SCAN 和 LOOK 五种调度策略。</p>
+    <h3>3.1 统一调度接口</h3>
+    <p>所有调度器都实现同一个 <code>Scheduler</code> 接口。接口只有两个方法：<code>Name()</code> 返回算法名称，<code>Assign(*System) bool</code> 执行一次分配尝试。这样 <code>System.Step()</code> 不需要知道当前使用的是哪一种具体算法，只需要调用 <code>s.scheduler.Assign(s)</code>。</p>
+    <pre><code>type Scheduler interface {
+    Name() string
+    Assign(system *System) bool
+    }</code></pre>
+    <p><code>NewScheduler(name)</code> 是调度器工厂函数，根据前端传入的名称创建具体调度器。前端通过 <code>POST /api/scheduler</code> 切换算法；后端的处理方式是重建一个新的 <code>System</code>，并为新的运行周期创建独立 SQLite 数据库文件。这保证同一个数据库文件只对应一种调度算法，便于后续统计分析。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>算法名称</th>
+          <th>前端/API 名称</th>
+          <th>实现文件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>First Available</td>
+          <td><code>first-available</code></td>
+          <td><code>internal/elevator/FirstAvailableScheduler.go</code></td>
+        </tr>
+        <tr>
+          <td>FCFS</td>
+          <td><code>fcfs</code></td>
+          <td><code>internal/elevator/FCFSScheduler.go</code></td>
+        </tr>
+        <tr>
+          <td>Nearest Idle</td>
+          <td><code>nearest-idle</code></td>
+          <td><code>internal/elevator/NearestIdleScheduler.go</code></td>
+        </tr>
+        <tr>
+          <td>SCAN</td>
+          <td><code>scan</code></td>
+          <td><code>internal/elevator/SCANScheduler.go</code></td>
+        </tr>
+        <tr>
+          <td>LOOK</td>
+          <td><code>look</code></td>
+          <td><code>internal/elevator/LOOKScheduler.go</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 简单算法</h3>
+    <p>简单算法主要用于建立调度接口、验证请求流转和作为高级算法的对照组。它们的共同特点是只处理 pending 请求中最早创建的一条请求，也就是通过 <code>firstPendingRequestID</code> 取 ID 最小的请求。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>算法</th>
+          <th>策略</th>
+          <th>优点</th>
+          <th>局限</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>First Available</td>
+          <td>只检查 1 号电梯；如果 1 号电梯空闲，就把最早请求分配给它。</td>
+          <td>实现极小，适合作为最早期可运行版本。</td>
+          <td>完全忽略其他电梯，效率和公平性都较弱。</td>
+        </tr>
+        <tr>
+          <td>FCFS</td>
+          <td>按请求创建顺序处理，把最早请求分配给第一部空闲电梯。</td>
+          <td>请求顺序清晰，先来先服务，容易解释。</td>
+          <td>不考虑距离和方向，可能让远处电梯响应近处请求。</td>
+        </tr>
+        <tr>
+          <td>Nearest Idle</td>
+          <td>取最早 pending 请求，在所有空闲电梯中选择 cost 最低的电梯。</td>
+          <td>比 FCFS 多考虑空间距离，通常能减少空闲电梯的无效移动。</td>
+          <td>只考虑空闲电梯，不能给顺路运行中的电梯追加停靠。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.3 SCAN 算法</h3>
+    <p>SCAN 来源于磁盘调度中的 Elevator Algorithm，核心思想是沿一个方向持续服务，当前方向上的请求处理完后再反向。把这个思想迁移到电梯场景中，每部电梯维护一个长期扫描方向 <code>ScanDirection</code>，它不同于即时运动方向 <code>Direction</code>：<code>Direction</code> 表示这一 tick 是否正在上行或下行，<code>ScanDirection</code> 表示调度器追加请求时优先判断的服务方向。</p>
+    <p>SCAN 不只让空闲电梯接单。已有停靠计划的电梯如果“顺路”，也可以追加新的 hall 请求或 cabin 请求。顺路判断由三个函数共同完成：<code>canAppendSCANRequest</code> 判断是否可追加，<code>isFloorAheadInSCAN</code> 判断请求楼层是否在扫描方向前方，<code>requestMatchesSCANDirection</code> 判断 hall 请求方向是否与扫描方向一致。</p>
+    <figure class="figure">
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <strong>1. 枚举请求</strong>
+          <span>遍历所有 pending 请求</span>
+        </div>
+        <div class="flow-step">
+          <strong>2. 枚举电梯</strong>
+          <span>空闲电梯可选，运行电梯需顺路</span>
+        </div>
+        <div class="flow-step">
+          <strong>3. 计算 cost</strong>
+          <span>距离、掉头、停靠数量、等待补偿</span>
+        </div>
+        <div class="flow-step">
+          <strong>4. 写入停靠</strong>
+          <span>选择最低 cost 并插入 StopPlan</span>
+        </div>
+      </div>
+      <figcaption>图 3-1 SCAN 调度执行流程</figcaption>
+    </figure>
+    <p>SCAN 的分配过程先在“请求 × 电梯”的所有可行组合中寻找候选，再选择 cost 最低的一项。找到候选后，<code>assignSCANRequest</code> 会修改请求状态、记录分配 tick 和电梯 ID，并调用 <code>insertSCANStop</code> 把请求转换成停靠计划。停靠顺序通过 <code>sortSCANStops</code> 维护：扫描方向向上时楼层升序，扫描方向向下时楼层降序，因此电梯每次只需要执行 <code>Stops[0]</code>。</p>
+    <pre><code>best = none
+for request in pendingRequests:
+    for elevator in elevators:
+        if elevator is idle or request is on the scan path:
+            score = EstimateAssignmentScore(system, elevator, request)
+            best = lowerCost(best, request, elevator, score)
+assign best request to best elevator</code></pre>
+    <p>举例来说，如果一部电梯当前在 6 楼，<code>ScanDirection</code> 为 up，已有 10 楼停靠，此时 8 楼上行请求可以被追加，因为它位于当前楼层前方且方向一致；但 8 楼下行请求不会被追加，因为乘客希望下行，和这部电梯当前扫描方向不一致。这样可以避免电梯为了接一个反向请求破坏已有服务顺序。</p>
+
+    <h3>3.4 LOOK 算法</h3>
+    <p>LOOK 是 SCAN 的改进版本。传统 SCAN 会沿当前方向一直走到物理边界再反向；LOOK 则“向前看”，只要当前方向前方已经没有停靠计划，就可以提前反向，不需要空跑到顶楼或底楼。现实电梯通常也更接近 LOOK：如果上方已经没有乘客请求，就没有必要为了算法形式继续上行。</p>
+    <p>本项目中的 LOOK 复用了 SCAN 的大部分候选选择逻辑，但在判断候选前增加了 <code>prepareLOOKDirection</code>。该函数会检查当前扫描方向前方是否还有 stop；如果没有，而反方向还有 stop，就立即切换 <code>ScanDirection</code>。随后 <code>canAppendLOOKRequest</code> 再按更新后的方向判断新请求是否顺路。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>对比项</th>
+          <th>SCAN</th>
+          <th>LOOK</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>方向保持</td>
+          <td>沿扫描方向持续服务。</td>
+          <td>沿扫描方向服务，但会检查前方是否还有实际停靠。</td>
+        </tr>
+        <tr>
+          <td>反向条件</td>
+          <td>更接近到达边界后反向的传统电梯算法思想。</td>
+          <td>当前方向无后续停靠时提前反向。</td>
+        </tr>
+        <tr>
+          <td>实现重点</td>
+          <td><code>canAppendSCANRequest</code> 和 <code>sortSCANStops</code>。</td>
+          <td><code>prepareLOOKDirection</code> 和 <code>hasLOOKStopAhead</code>。</td>
+        </tr>
+        <tr>
+          <td>适用场景</td>
+          <td>适合解释经典扫描思想。</td>
+          <td>更贴近真实电梯，减少没有必要的方向保持。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.5 cost 函数</h3>
+    <p>高级调度器需要在多个“请求-电梯”候选之间比较优劣，因此项目中抽出了统一的评分结构 <code>AssignmentScore</code>。当前 cost 公式为：<code>Total = DistanceCost + TurnPenalty + StopPenalty - WaitCompensation</code>。总分越低，候选越优；如果总分相同，则选择请求更早、电梯编号更小的候选，保证结果稳定并便于测试。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>评分项</th>
+          <th>计算方式</th>
+          <th>设计意图</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>DistanceCost</code></td>
+          <td><code>|currentFloor - requestFloor| * TicksPerFloor</code></td>
+          <td>楼层距离越远，响应成本越高。</td>
+        </tr>
+        <tr>
+          <td><code>TurnPenalty</code></td>
+          <td>如果需要掉头，增加 20。</td>
+          <td>避免频繁改变方向，保护已有服务顺序。</td>
+        </tr>
+        <tr>
+          <td><code>StopPenalty</code></td>
+          <td>已有每个 stop 增加 10。</td>
+          <td>已有任务越多的电梯越忙，不应无限追加。</td>
+        </tr>
+        <tr>
+          <td><code>WaitCompensation</code></td>
+          <td><code>CurrentTick - CreatedTick</code></td>
+          <td>等待越久的请求获得补偿，降低长期饥饿风险。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>cost 函数不单独属于某个算法，而是调度器比较候选时的共同工具。Nearest Idle 使用它在空闲电梯之间做选择；SCAN 和 LOOK 使用它在“所有 pending 请求 × 所有可行电梯”的组合中做选择。这样调度策略和评分维度分开，后续如果要加入容量、能耗或更复杂的等待惩罚，也可以集中修改评分函数。</p>
+
+    <h3>3.6 算法对比</h3>
+    <p>项目提供了 <code>scripts/compare_charts.py</code> 和 <code>scripts/compare.sh</code> 等分析脚本，用于扫描 <code>data/</code> 下按调度器命名的 SQLite 数据库，读取 <code>completed_requests</code> 表，并生成 <code>analysis/analysis.md</code>、柱状图和完成请求数图。当前已有图表包括 <code>analysis/compare_bar.png</code> 和 <code>analysis/compare_count.png</code>。</p>
+    <figure class="figure">
+      <img class="screenshot" src="../analysis/compare_bar.png" alt="调度算法平均等待和总耗时对比图">
+      <figcaption>图 3-2 各调度器平均等待时间与平均总耗时对比</figcaption>
+    </figure>
+    <figure class="figure">
+      <img class="screenshot" src="../analysis/compare_count.png" alt="调度算法完成请求数对比图">
+      <figcaption>图 3-3 各调度器完成请求数对比</figcaption>
+    </figure>
+    <table>
+      <thead>
+        <tr>
+          <th>调度器</th>
+          <th>请求数</th>
+          <th>平均等待</th>
+          <th>等待 P95</th>
+          <th>平均总耗时</th>
+          <th>总耗时 P95</th>
+          <th>最大总耗时</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>fcfs</code></td>
+          <td>1</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td><code>first-available</code></td>
+          <td>1</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>0</td>
+        </tr>
+        <tr>
+          <td><code>look</code></td>
+          <td>2</td>
+          <td>1.0</td>
+          <td>1.9</td>
+          <td>1.0</td>
+          <td>1.9</td>
+          <td>2</td>
+        </tr>
+        <tr>
+          <td><code>nearest-idle</code></td>
+          <td>26</td>
+          <td>0.0</td>
+          <td>0.0</td>
+          <td>30.0</td>
+          <td>56.0</td>
+          <td>64</td>
+        </tr>
+        <tr>
+          <td><code>scan</code></td>
+          <td>2</td>
+          <td>1.0</td>
+          <td>1.9</td>
+          <td>1.0</td>
+          <td>1.9</td>
+          <td>2</td>
+        </tr>
+      </tbody>
+    </table>
+    <blockquote class="quote">当前 <code>analysis/analysis.md</code> 中各调度器样本数不一致，因此上表和图 3-2、图 3-3 更适合作为“分析脚本和数据链路已打通”的证明，而不能直接作为严格公平的算法优劣结论。若要在最终提交中给出强结论，应使用同一组请求序列分别运行五种算法，并保证每种算法完成相同数量的请求后再比较平均等待、P95 和总耗时。</blockquote>
+
+    <div class="note">截至本报告当前版本，HTML 内容已完成第 1 章、第 2 章和第 3 章。后续章节将继续补充 Go 并发模型和总结。</div>
   </main>
 </body>
 </html>
