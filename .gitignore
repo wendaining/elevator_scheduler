@@ -26,6 +26,7 @@ data/*.db-wal
 
 # Analysis outputs
 /analysis/
+/scripts/
 
 # Go build and test outputs
 bin/
