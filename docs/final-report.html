@@ -200,6 +200,16 @@
       background: #fbfcfe;
     }
 
+    .diagram-frame {
+      position: relative;
+      overflow: hidden;
+      padding: 20px;
+      background:
+        linear-gradient(135deg, rgba(31, 95, 153, 0.08), rgba(255, 255, 255, 0) 42%),
+        radial-gradient(circle at 88% 18%, rgba(14, 116, 144, 0.10), transparent 28%),
+        #fbfcfe;
+    }
+
     .figure figcaption {
       margin-top: 10px;
       color: var(--muted);
@@ -217,66 +227,176 @@
       background: #fff;
     }
 
-    .layer-diagram {
+    .arch-diagram {
+      position: relative;
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: 1.05fr 0.85fr 1fr 1fr 0.95fr;
+      gap: 18px;
       align-items: stretch;
+      padding: 8px 2px;
     }
 
-    .layer {
-      min-height: 86px;
+    .arch-diagram::before {
+      content: "";
+      position: absolute;
+      left: 5%;
+      right: 5%;
+      top: 50%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #9ab8d4 10%, #9ab8d4 90%, transparent);
+      transform: translateY(-50%);
+    }
+
+    .arch-node {
+      position: relative;
+      z-index: 1;
+      min-height: 126px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 4px;
-      padding: 12px;
+      gap: 7px;
+      padding: 14px 13px;
       border: 1px solid #b9d5ef;
-      border-radius: 6px;
-      background: var(--accent-soft);
-      text-align: center;
+      border-top: 4px solid var(--accent);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 12px 28px rgba(23, 32, 51, 0.10);
     }
 
-    .layer strong {
+    .arch-node::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -17px;
+      width: 16px;
+      color: #547798;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: 18px;
+      line-height: 1;
+      transform: translateY(-50%);
+    }
+
+    .arch-node:last-child::after {
+      content: "";
+    }
+
+    .arch-node .tag {
+      color: #64748b;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .arch-node strong {
       color: var(--accent);
-      font-size: 15px;
+      font-size: 16px;
+      line-height: 1.25;
     }
 
-    .layer span {
+    .arch-node span {
       color: var(--muted);
       font-size: 12px;
       line-height: 1.45;
     }
 
-    .flow-diagram {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      align-items: stretch;
+    .arch-node.frontend {
+      border-top-color: #0f766e;
     }
 
-    .flow-step {
-      min-height: 96px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      gap: 4px;
-      padding: 12px;
-      border: 1px solid #b9d5ef;
-      border-radius: 6px;
-      background: var(--accent-soft);
-      text-align: center;
+    .arch-node.api {
+      border-top-color: #1f5f99;
     }
 
-    .flow-step strong {
-      color: var(--accent);
-      font-size: 15px;
+    .arch-node.scheduler {
+      border-top-color: #7c3aed;
     }
 
-    .flow-step span {
-      color: var(--muted);
+    .arch-node.runner {
+      border-top-color: #c2410c;
+    }
+
+    .arch-node.store {
+      border-top-color: #475569;
+    }
+
+    .mermaid-scan {
+      display: block;
+      width: 100%;
+      height: auto;
+      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+    }
+
+    .mermaid-scan .node {
+      fill: rgba(255, 255, 255, 0.96);
+      stroke: #8db8df;
+      stroke-width: 1.4;
+      filter: url(#diagramShadow);
+    }
+
+    .mermaid-scan .decision {
+      fill: #fffaf0;
+      stroke: #d29b45;
+      stroke-width: 1.6;
+      filter: url(#diagramShadow);
+    }
+
+    .mermaid-scan .terminal {
+      fill: #eef7f5;
+      stroke: #0f766e;
+    }
+
+    .mermaid-scan .write {
+      fill: #f6f1ff;
+      stroke: #7c3aed;
+    }
+
+    .mermaid-scan .arrow {
+      fill: none;
+      stroke: #406a8f;
+      stroke-width: 2;
+      marker-end: url(#arrowHead);
+    }
+
+    .mermaid-scan .loop {
+      fill: none;
+      stroke: #7c8797;
+      stroke-width: 1.8;
+      stroke-dasharray: 6 5;
+      marker-end: url(#arrowHeadMuted);
+    }
+
+    .mermaid-scan .label {
+      fill: #172033;
+      font-size: 17px;
+      font-weight: 700;
+      text-anchor: middle;
+    }
+
+    .mermaid-scan .sub {
+      fill: #596579;
+      font-size: 13px;
+      text-anchor: middle;
+    }
+
+    .mermaid-scan .edge-label {
+      fill: #475569;
       font-size: 12px;
-      line-height: 1.45;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      text-anchor: middle;
+    }
+
+    .todo-box {
+      margin: 14px 0 18px;
+      padding: 14px 16px;
+      border: 1px dashed #b45309;
+      border-left: 4px solid #b45309;
+      background: #fffbeb;
+      color: #513a11;
+    }
+
+    .todo-box strong {
+      color: #92400e;
     }
 
     .note {
@@ -331,9 +451,13 @@
       }
 
       .meta,
-      .layer-diagram,
-      .flow-diagram {
+      .arch-diagram {
         grid-template-columns: 1fr;
+      }
+
+      .arch-diagram::before,
+      .arch-node::after {
+        display: none;
       }
     }
   </style>
@@ -385,25 +509,30 @@
     <h3>1.3 系统运行流程</h3>
     <p>系统启动后，后端创建 <code>System</code> 实例和电梯运行 goroutine，并由自动 ticker 周期性调用 <code>Step()</code> 推进模拟时间。前端页面通过轮询 <code>GET /api/state</code> 获取系统快照，用户在界面中点击楼层按钮或提交轿厢请求后，前端向后端发送 HTTP 请求，后端将请求写入运行态数据结构，再由当前调度器在后续 tick 中完成分配。</p>
 
-    <figure class="figure">
-      <div class="layer-diagram">
-        <div class="layer">
+    <figure class="figure diagram-frame">
+      <div class="arch-diagram">
+        <div class="arch-node frontend">
+          <span class="tag">Vue / Vite</span>
           <strong>Web 前端</strong>
           <span>提交请求、展示状态、切换算法</span>
         </div>
-        <div class="layer">
+        <div class="arch-node api">
+          <span class="tag">net/http</span>
           <strong>HTTP API</strong>
           <span>解析 JSON、校验输入、返回状态</span>
         </div>
-        <div class="layer">
+        <div class="arch-node scheduler">
+          <span class="tag">Scheduler</span>
           <strong>调度器</strong>
           <span>选择响应请求的电梯</span>
         </div>
-        <div class="layer">
+        <div class="arch-node runner">
+          <span class="tag">goroutine</span>
           <strong>电梯运行层</strong>
           <span>每部电梯独立 goroutine 推进状态</span>
         </div>
-        <div class="layer">
+        <div class="arch-node store">
+          <span class="tag">SQLite</span>
           <strong>SQLite</strong>
           <span>保存已完成请求历史</span>
         </div>
@@ -745,19 +874,19 @@ Content-Type: application/json
 go test -race ./...</code></pre>
 
     <h2 class="section">3. 调度算法</h2>
-    <!-- TODO: 给这些调度算法补充中文名 -->
-    <p>调度算法是本项目最核心的部分。系统把乘客请求抽象成 <code>Request</code>，把每部电梯抽象成可执行资源，调度器负责在每个 tick 开始时从 pending 请求中挑选一个可行分配，并把请求转换成对应电梯的 <code>StopPlan</code>。当前系统实现了 First Available、FCFS、Nearest Idle、SCAN 和 LOOK 五种调度策略。</p>
+    <p>调度算法是本项目最核心的部分。系统把乘客请求抽象成 <code>Request</code>，把每部电梯抽象成可执行资源，调度器负责在每个 tick 开始时从 pending 请求中挑选一个可行分配，并把请求转换成对应电梯的 <code>StopPlan</code>。当前系统实现了 First Available（第一可用）、FCFS（先来先服务）、Nearest Idle（最近空闲）、SCAN（扫描/电梯算法）和 LOOK（LOOK 扫描）五种调度策略。</p>
     <h3>3.1 统一调度接口</h3>
     <p>所有调度器都实现同一个 <code>Scheduler</code> 接口。接口只有两个方法：<code>Name()</code> 返回算法名称，<code>Assign(*System) bool</code> 执行一次分配尝试。这样 <code>System.Step()</code> 不需要知道当前使用的是哪一种具体算法，只需要调用 <code>s.scheduler.Assign(s)</code>。</p>
     <pre><code>type Scheduler interface {
     Name() string
     Assign(system *System) bool
-    }</code></pre>
+}</code></pre>
     <p><code>NewScheduler(name)</code> 是调度器工厂函数，根据前端传入的名称创建具体调度器。前端通过 <code>POST /api/scheduler</code> 切换算法；后端的处理方式是重建一个新的 <code>System</code>，并为新的运行周期创建独立 SQLite 数据库文件。这保证同一个数据库文件只对应一种调度算法，便于后续统计分析。</p>
     <table>
       <thead>
         <tr>
           <th>算法名称</th>
+          <th>中文说明</th>
           <th>前端/API 名称</th>
           <th>实现文件</th>
         </tr>
@@ -765,26 +894,31 @@ go test -race ./...</code></pre>
       <tbody>
         <tr>
           <td>First Available</td>
+          <td>第一可用</td>
           <td><code>first-available</code></td>
           <td><code>internal/elevator/FirstAvailableScheduler.go</code></td>
         </tr>
         <tr>
           <td>FCFS</td>
+          <td>先来先服务</td>
           <td><code>fcfs</code></td>
           <td><code>internal/elevator/FCFSScheduler.go</code></td>
         </tr>
         <tr>
           <td>Nearest Idle</td>
+          <td>最近空闲电梯优先</td>
           <td><code>nearest-idle</code></td>
           <td><code>internal/elevator/NearestIdleScheduler.go</code></td>
         </tr>
         <tr>
           <td>SCAN</td>
+          <td>扫描算法 / 电梯算法</td>
           <td><code>scan</code></td>
           <td><code>internal/elevator/SCANScheduler.go</code></td>
         </tr>
         <tr>
           <td>LOOK</td>
+          <td>LOOK 扫描算法</td>
           <td><code>look</code></td>
           <td><code>internal/elevator/LOOKScheduler.go</code></td>
         </tr>
@@ -827,25 +961,61 @@ go test -race ./...</code></pre>
     <h3>3.3 SCAN 算法</h3>
     <p>SCAN 来源于磁盘调度中的 Elevator Algorithm，核心思想是沿一个方向持续服务，当前方向上的请求处理完后再反向。把这个思想迁移到电梯场景中，每部电梯维护一个长期扫描方向 <code>ScanDirection</code>，它不同于即时运动方向 <code>Direction</code>：<code>Direction</code> 表示这一 tick 是否正在上行或下行，<code>ScanDirection</code> 表示调度器追加请求时优先判断的服务方向。</p>
     <p>SCAN 不只让空闲电梯接单。已有停靠计划的电梯如果“顺路”，也可以追加新的 hall 请求或 cabin 请求。顺路判断由三个函数共同完成：<code>canAppendSCANRequest</code> 判断是否可追加，<code>isFloorAheadInSCAN</code> 判断请求楼层是否在扫描方向前方，<code>requestMatchesSCANDirection</code> 判断 hall 请求方向是否与扫描方向一致。</p>
-    <figure class="figure">
-      <div class="flow-diagram">
-        <div class="flow-step">
-          <strong>1. 枚举请求</strong>
-          <span>遍历所有 pending 请求</span>
-        </div>
-        <div class="flow-step">
-          <strong>2. 枚举电梯</strong>
-          <span>空闲电梯可选，运行电梯需顺路</span>
-        </div>
-        <div class="flow-step">
-          <strong>3. 计算 cost</strong>
-          <span>距离、掉头、停靠数量、等待补偿</span>
-        </div>
-        <div class="flow-step">
-          <strong>4. 写入停靠</strong>
-          <span>选择最低 cost 并插入 StopPlan</span>
-        </div>
-      </div>
+    <figure class="figure diagram-frame">
+      <svg class="mermaid-scan" viewBox="0 0 900 390" role="img" aria-label="SCAN 调度执行流程图">
+        <defs>
+          <filter id="diagramShadow" x="-20%" y="-30%" width="140%" height="170%">
+            <feDropShadow dx="0" dy="10" stdDeviation="8" flood-color="#172033" flood-opacity="0.14"/>
+          </filter>
+          <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+            <path d="M 1 1 L 11 6 L 1 11 z" fill="#406a8f"/>
+          </marker>
+          <marker id="arrowHeadMuted" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+            <path d="M 1 1 L 11 6 L 1 11 z" fill="#7c8797"/>
+          </marker>
+        </defs>
+
+        <rect class="node terminal" x="42" y="42" width="170" height="78" rx="18"/>
+        <text class="label" x="127" y="75">枚举请求</text>
+        <text class="sub" x="127" y="99">pending request</text>
+
+        <polygon class="decision" points="360,35 472,82 360,129 248,82"/>
+        <text class="label" x="360" y="76">候选可行?</text>
+        <text class="sub" x="360" y="100">空闲或顺路</text>
+
+        <rect class="node" x="548" y="42" width="180" height="78" rx="14"/>
+        <text class="label" x="638" y="75">计算 cost</text>
+        <text class="sub" x="638" y="99">距离 / 掉头 / 停靠 / 等待</text>
+
+        <rect class="node" x="548" y="226" width="180" height="78" rx="14"/>
+        <text class="label" x="638" y="258">选择最优候选</text>
+        <text class="sub" x="638" y="282">Total 最低优先</text>
+
+        <rect class="node write" x="278" y="226" width="190" height="78" rx="14"/>
+        <text class="label" x="373" y="258">写入停靠计划</text>
+        <text class="sub" x="373" y="282">Request → StopPlan</text>
+
+        <rect class="node terminal" x="42" y="226" width="170" height="78" rx="18"/>
+        <text class="label" x="127" y="258">等待执行</text>
+        <text class="sub" x="127" y="282">电梯 runner 推进</text>
+
+        <rect class="node" x="278" y="143" width="190" height="54" rx="12"/>
+        <text class="label" x="373" y="176">跳过该候选</text>
+
+        <path class="arrow" d="M 212 82 H 244"/>
+        <text class="edge-label" x="230" y="70">遍历</text>
+        <path class="arrow" d="M 472 82 H 544"/>
+        <text class="edge-label" x="508" y="70">是</text>
+        <path class="arrow" d="M 638 120 V 222"/>
+        <path class="arrow" d="M 548 265 H 472"/>
+        <path class="arrow" d="M 278 265 H 216"/>
+        <path class="arrow" d="M 360 129 V 139"/>
+        <text class="edge-label" x="340" y="142">否</text>
+        <path class="loop" d="M 373 197 C 373 332 764 342 764 82 H 733"/>
+        <text class="edge-label" x="610" y="350">继续枚举 request × elevator</text>
+        <path class="loop" d="M 127 226 V 147 C 127 132 138 126 153 126 H 244"/>
+        <text class="edge-label" x="164" y="156">下个 tick</text>
+      </svg>
       <figcaption>图 3-1 SCAN 调度执行流程</figcaption>
     </figure>
     <p>SCAN 的分配过程先在“请求 × 电梯”的所有可行组合中寻找候选，再选择 cost 最低的一项。找到候选后，<code>assignSCANRequest</code> 会修改请求状态、记录分配 tick 和电梯 ID，并调用 <code>insertSCANStop</code> 把请求转换成停靠计划。停靠顺序通过 <code>sortSCANStops</code> 维护：扫描方向向上时楼层升序，扫描方向向下时楼层降序，因此电梯每次只需要执行 <code>Stops[0]</code>。</p>
@@ -929,76 +1099,8 @@ assign best request to best elevator</code></pre>
     <p>cost 函数不单独属于某个算法，而是调度器比较候选时的共同工具。Nearest Idle 使用它在空闲电梯之间做选择；SCAN 和 LOOK 使用它在“所有 pending 请求 × 所有可行电梯”的组合中做选择。这样调度策略和评分维度分开，后续如果要加入容量、能耗或更复杂的等待惩罚，也可以集中修改评分函数。</p>
 
     <h3>3.6 算法对比</h3>
-    <p>项目提供了 <code>scripts/compare_charts.py</code> 和 <code>scripts/compare.sh</code> 等分析脚本，用于扫描 <code>data/</code> 下按调度器命名的 SQLite 数据库，读取 <code>completed_requests</code> 表，并生成 <code>analysis/analysis.md</code>、柱状图和完成请求数图。当前已有图表包括 <code>analysis/compare_bar.png</code> 和 <code>analysis/compare_count.png</code>。</p>
-    <figure class="figure">
-      <img class="screenshot" src="../analysis/compare_bar.png" alt="调度算法平均等待和总耗时对比图">
-      <figcaption>图 3-2 各调度器平均等待时间与平均总耗时对比</figcaption>
-    </figure>
-    <figure class="figure">
-      <img class="screenshot" src="../analysis/compare_count.png" alt="调度算法完成请求数对比图">
-      <figcaption>图 3-3 各调度器完成请求数对比</figcaption>
-    </figure>
-    <table>
-      <thead>
-        <tr>
-          <th>调度器</th>
-          <th>请求数</th>
-          <th>平均等待</th>
-          <th>等待 P95</th>
-          <th>平均总耗时</th>
-          <th>总耗时 P95</th>
-          <th>最大总耗时</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>fcfs</code></td>
-          <td>1</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>0</td>
-        </tr>
-        <tr>
-          <td><code>first-available</code></td>
-          <td>1</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>0</td>
-        </tr>
-        <tr>
-          <td><code>look</code></td>
-          <td>2</td>
-          <td>1.0</td>
-          <td>1.9</td>
-          <td>1.0</td>
-          <td>1.9</td>
-          <td>2</td>
-        </tr>
-        <tr>
-          <td><code>nearest-idle</code></td>
-          <td>26</td>
-          <td>0.0</td>
-          <td>0.0</td>
-          <td>30.0</td>
-          <td>56.0</td>
-          <td>64</td>
-        </tr>
-        <tr>
-          <td><code>scan</code></td>
-          <td>2</td>
-          <td>1.0</td>
-          <td>1.9</td>
-          <td>1.0</td>
-          <td>1.9</td>
-          <td>2</td>
-        </tr>
-      </tbody>
-    </table>
-    <blockquote class="quote">当前 <code>analysis/analysis.md</code> 中各调度器样本数不一致，因此上表和图 3-2、图 3-3 更适合作为“分析脚本和数据链路已打通”的证明，而不能直接作为严格公平的算法优劣结论。若要在最终提交中给出强结论，应使用同一组请求序列分别运行五种算法，并保证每种算法完成相同数量的请求后再比较平均等待、P95 和总耗时。</blockquote>
+    <p>项目已经具备算法对比的数据链路：后端会把完成请求写入 SQLite，<code>scripts/compare_charts.py</code> 可以读取不同调度器对应的数据库文件，并生成统计表和图表。但当前已有数据样本数不一致，不适合作为最终报告中的严格性能结论。</p>
+    <div class="todo-box"><strong>TODO：</strong>后续重新生成公平对比实验。要求使用同一组请求序列分别运行 First Available、FCFS、Nearest Idle、SCAN 和 LOOK，保证每种算法完成相同数量的请求，再补充平均等待 tick、P95 等待 tick、平均总耗时、P95 总耗时、最大总耗时等指标，并把新的图表替换到本节。</div>
 
     <div class="note">截至本报告当前版本，HTML 内容已完成第 1 章、第 2 章和第 3 章。后续章节将继续补充 Go 并发模型和总结。</div>
   </main>
