@@ -256,6 +256,14 @@
       color: #334155;
     }
 
+    .quote {
+      margin: 14px 0 18px;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: #f8fafc;
+      color: #334155;
+    }
+
     .danger {
       color: var(--danger);
       font-weight: 700;
@@ -314,15 +322,8 @@
 
     <section class="abstract">
       <h2>摘要</h2>
-      <p>
-        本项目实现了一个面向操作系统课程的电梯调度算法可视化系统。系统以多部电梯共享楼层请求为基本场景，
-        将乘客请求类比为待调度任务，将电梯类比为资源执行单元，由调度器决定请求分配，并由每部电梯的独立
-        goroutine 推进运行状态。后端使用 Go 标准库 <code>net/http</code> 提供 API，使用 SQLite 保存已完成请求；
-        前端使用 Vue 3、Element Plus 与 Vite 实现可交互的楼层请求、轿厢请求、算法切换和运行日志展示。
-      </p>
-      <div class="keywords">
-        <strong>关键词：</strong>电梯调度；操作系统；Go；goroutine；HTTP API；Vue；SQLite
-      </div>
+      <p>本项目实现了一个面向操作系统课程的电梯调度算法可视化系统。系统以多部电梯共享楼层请求为基本场景，将乘客请求类比为待调度任务，将电梯类比为资源执行单元，由调度器决定请求分配，并由每部电梯的独立 goroutine 推进运行状态。后端使用 Go 标准库 <code>net/http</code> 提供 API，使用 SQLite 保存已完成请求；前端使用 Vue 3、Element Plus 与 Vite 实现可交互的楼层请求、轿厢请求、算法切换和运行日志展示。</p>
+      <div class="keywords"><strong>关键词：</strong>电梯调度；操作系统；Go；goroutine；HTTP API；Vue；SQLite</div>
     </section>
 
     <nav class="toc">
@@ -336,14 +337,8 @@
     <h2 class="section">1. 项目概述</h2>
 
     <h3>1.1 项目背景</h3>
-    <p>
-      电梯调度问题是操作系统调度问题的一个直观类比：多部电梯对应多个可执行资源，楼层请求和轿厢内请求对应等待被处理的任务，调度算法需要在公平性、响应速度和资源利用率之间作出权衡。本项目以一栋默认 20 层、5 部电梯的大楼为基础场景，但在实现上将楼层数、电梯数和运行节奏设计为可配置参数，便于测试不同规模下的调度行为。
-    </p>
-    <p>
-      与只实现单个算法的命令行模拟程序不同，本项目同时关注“算法执行过程是否可观察”和“并发模型是否清晰”。
-      因此系统提供 Web 可视化界面，支持在前端直接发起 hall 请求、cabin 请求、紧急制动和调度算法切换，
-      后端持续推进离散 tick，并将当前系统状态通过 HTTP API 暴露给前端。
-    </p>
+    <p>电梯调度问题是操作系统调度问题的一个直观类比：多部电梯对应多个可执行资源，楼层请求和轿厢内请求对应等待被处理的任务，调度算法需要在公平性、响应速度和资源利用率之间作出权衡。本项目以一栋默认 20 层、5 部电梯的大楼为基础场景，但在实现上将楼层数、电梯数和运行节奏设计为可配置参数，便于测试不同规模下的调度行为。</p>
+    <p>与只实现单个算法的命令行模拟程序不同，本项目同时关注“算法执行过程是否可观察”和“并发模型是否清晰”。因此系统提供 Web 可视化界面，支持在前端直接发起 hall 请求、cabin 请求、紧急制动和调度算法切换，后端持续推进离散 tick，并将当前系统状态通过 HTTP API 暴露给前端。</p>
 
     <h3>1.2 项目目标</h3>
     <ul>
@@ -355,12 +350,7 @@
     </ul>
 
     <h3>1.3 系统运行流程</h3>
-    <p>
-      系统启动后，后端创建 <code>System</code> 实例和电梯运行 goroutine，并由自动 ticker 周期性调用
-      <code>Step()</code> 推进模拟时间。前端页面通过轮询 <code>GET /api/state</code> 获取系统快照，
-      用户在界面中点击楼层按钮或提交轿厢请求后，前端向后端发送 HTTP 请求，后端将请求写入运行态数据结构，
-      再由当前调度器在后续 tick 中完成分配。
-    </p>
+    <p>系统启动后，后端创建 <code>System</code> 实例和电梯运行 goroutine，并由自动 ticker 周期性调用 <code>Step()</code> 推进模拟时间。前端页面通过轮询 <code>GET /api/state</code> 获取系统快照，用户在界面中点击楼层按钮或提交轿厢请求后，前端向后端发送 HTTP 请求，后端将请求写入运行态数据结构，再由当前调度器在后续 tick 中完成分配。</p>
 
     <figure class="figure">
       <div class="layer-diagram">
@@ -450,12 +440,7 @@ npm run dev</code></pre>
     <h2 class="section">2. 系统设计与实现</h2>
 
     <h3>2.1 系统架构概览</h3>
-    <p>
-      系统采用前后端分离但部署简单的结构。前端负责渲染大楼、电梯、请求按钮和配置面板；后端负责维护状态，
-      所有请求创建、调度算法切换、系统重启和紧急制动均通过 API 进入后端。调度层不直接处理 HTTP，
-      而是围绕 <code>System</code>、<code>Request</code>、<code>Elevator</code> 和 <code>Scheduler</code>
-      等核心类型实现业务逻辑。
-    </p>
+    <p>系统采用前后端分离但部署简单的结构。前端负责渲染大楼、电梯、请求按钮和配置面板；后端负责维护状态，所有请求创建、调度算法切换、系统重启和紧急制动均通过 API 进入后端。调度层不直接处理 HTTP，而是围绕 <code>System</code>、<code>Request</code>、<code>Elevator</code> 和 <code>Scheduler</code> 等核心类型实现业务逻辑。</p>
     <table>
       <thead>
         <tr>
@@ -503,9 +488,7 @@ npm run dev</code></pre>
       </tbody>
     </table>
 
-    <p>
-      调度算法和电梯运行逻辑都位于后端核心模型中，前端只通过 API 操作系统状态，不会复制调度逻辑；SQLite 只记录历史数据，不参与每个 tick 的关键路径，因此不会影响运行态调度性能。
-    </p>
+    <p>调度算法和电梯运行逻辑都位于后端核心模型中，前端只通过 API 操作系统状态，不会复制调度逻辑；SQLite 只记录历史数据，不参与每个 tick 的关键路径，因此不会影响运行态调度性能。</p>
 
     <h3>2.2 项目结构</h3>
     <pre><code>os_sp26_proj1/
@@ -520,16 +503,10 @@ npm run dev</code></pre>
 ├── img/                 # README 和报告使用的图片资源
 └── docker-compose.yml   # Docker Compose 启动配置
 </code></pre>
-    <p>
-      Go 项目中 <code>internal</code> 目录表示内部包，不希望被仓库外部直接导入。该结构使 API 层和电梯核心模型
-      在同一后端项目中保持清晰边界：<code>internal/api</code> 关心 HTTP 输入输出，<code>internal/elevator</code>
-      关心调度和状态推进。
-    </p>
+    <p>Go 项目中 <code>internal</code> 目录表示内部包，不希望被仓库外部直接导入。该结构使 API 层和电梯核心模型在同一后端项目中保持清晰边界：<code>internal/api</code> 关心 HTTP 输入输出，<code>internal/elevator</code> 关心调度和状态推进。</p>
 
     <h3>2.3 核心数据模型</h3>
-    <p>
-      系统的核心数据模型围绕请求、停靠计划、电梯和系统四类对象展开：
-    </p>
+    <p>系统的核心数据模型围绕请求、停靠计划、电梯和系统四类对象展开：</p>
     <table>
       <thead>
         <tr>
@@ -568,31 +545,22 @@ npm run dev</code></pre>
     </table>
 
     <h4>2.3.1 请求状态与运行态存储</h4>
-    <p>
-      <code>Requests map[int64]*Request</code> 只保存 pending 和 assigned 状态的请求。请求完成后会被
-      <code>completeRequest</code> 标记为 done，写入 SQLite，然后从运行态 map 中删除。这样可以保持运行态
-      数据结构轻量，同时保留完整历史记录用于实验统计。
-    </p>
+    <p><code>Requests map[int64]*Request</code> 只保存 pending 和 assigned 状态的请求。请求完成后会被 <code>completeRequest</code> 标记为 done，写入 SQLite，然后从运行态 map 中删除。这样可以保持运行态数据结构轻量，同时保留完整历史记录用于实验统计。</p>
 
     <h4>2.3.2 hall 请求与 cabin 请求</h4>
-    <p>
-      hall 请求来自楼层外部，需要由调度算法决定分配给哪部电梯；cabin 请求来自某部电梯内部，属于指定电梯，
-      在 <code>AddRequest</code> 中直接分配给对应电梯，不进入 pending 状态。
-    </p>
+    <p>hall 请求来自楼层外部，需要由调度算法决定分配给哪部电梯；cabin 请求来自某部电梯内部，属于指定电梯，在 <code>AddRequest</code> 中直接分配给对应电梯，不进入 pending 状态。这一区分避免了“某部电梯内部按下目标楼层，却被调度器分配给另一部电梯”的错误。</p>
 
-    <h4>2.3.3 紧急制动</h4>
-    <p>
-      电梯模型包含 <code>EmergencyStop</code> 和 <code>EmergencyRemainingTicks</code>。当前端触发紧急制动后，
-      后端将指定电梯设置为报警暂停状态，并设置剩余暂停 tick 数。后续每个 tick 中，该电梯保持 idle，
-      直到倒计时归零后自动恢复运行。暂停时长由 <code>SystemConfig.EmergencyStopTicks</code> 配置，在
-      <code>cmd/server/main.go</code> 中与其他默认运行参数统一设置。
-    </p>
+    <h4>2.3.3 停靠计划 StopPlan</h4>
+    <p><code>StopPlan</code> 用来替代早期的目标楼层整数列表。只保存 <code>[]int</code> 时，同一楼层的上行 hall 请求、下行 hall 请求和 cabin 目标很容易被错误合并；而 <code>StopPlan</code> 同时记录 <code>Floor</code>、<code>Reason</code>、<code>Direction</code> 和 <code>RequestIDs</code>，可以准确表达“为什么停”和“这一站完成哪些请求”。</p>
+
+    <h4>2.3.4 时间片与运行节奏</h4>
+    <p>系统使用 <code>CurrentTick</code> 作为全局离散时钟，请求创建、分配和完成都记录 tick，而不是直接依赖真实时间。<code>TicksPerFloor</code>、<code>DoorBaseTicks</code> 和 <code>TickPerPassenger</code> 等常量用于描述移动一层、开门停留和乘客上下行所消耗的模拟时间；自动推进间隔则由后端 ticker 控制，当前默认每 250ms 推进一个 tick。</p>
+
+    <h4>2.3.5 电梯状态与紧急制动</h4>
+    <p><code>Elevator</code> 同时保存运行位置、运动方向、扫描方向、门状态、移动倒计时、开门倒计时和紧急制动状态。当前端触发紧急制动后，后端将指定电梯设置为 <code>EmergencyStop</code>，并设置 <code>EmergencyRemainingTicks</code>；后续每个 tick 中，该电梯保持 idle，直到倒计时归零后自动恢复运行。这个设计与移动耗时、开门停留一样，都是电梯运行状态机的一部分。</p>
 
     <h3>2.4 HTTP API 设计</h3>
-    <p>
-      后端 API 采用 JSON 作为请求和响应格式。所有会修改系统状态的接口使用 POST，只读接口使用 GET。
-      handler 层会拒绝不匹配的方法、非法 JSON、未知字段和不合法业务参数。
-    </p>
+    <p>后端 API 采用 JSON 作为请求和响应格式。所有会修改系统状态的接口使用 POST，只读接口使用 GET。handler 层会拒绝不匹配的方法、非法 JSON、未知字段和不合法业务参数。</p>
     <table>
       <thead>
         <tr>
@@ -675,17 +643,10 @@ Content-Type: application/json
   "elevatorId": 4
 }</code></pre>
 
-    <div class="note">
-      <strong>错误处理约定：</strong>非法输入返回 400，方法不匹配返回 405，服务器内部状态或编码错误返回 500。
-      JSON 解码使用 <code>DisallowUnknownFields</code>，避免前端提交未定义字段后被后端静默忽略。
-    </div>
+    <div class="note"><strong>错误处理约定：</strong>非法输入返回 400，方法不匹配返回 405，服务器内部状态或编码错误返回 500。JSON 解码使用 <code>DisallowUnknownFields</code>，避免前端提交未定义字段后被后端静默忽略。</div>
 
     <h3>2.5 SQLite 持久化</h3>
-    <p>
-      系统使用 SQLite 保存已完成请求。数据库表 <code>completed_requests</code> 的字段与 <code>Request</code>
-      结构基本对应，包括请求 ID、楼层、方向、请求来源、状态、创建 tick、分配 tick、完成 tick 和响应电梯 ID。
-      请求完成时，后端调用 <code>RequestStore.SaveCompletedRequest</code> 写入数据库。
-    </p>
+    <p>系统使用 SQLite 保存已完成请求。数据库表 <code>completed_requests</code> 的字段与 <code>Request</code> 结构基本对应，包括请求 ID、楼层、方向、请求来源、状态、创建 tick、分配 tick、完成 tick 和响应电梯 ID。请求完成时，后端调用 <code>RequestStore.SaveCompletedRequest</code> 写入数据库。</p>
     <pre><code>CREATE TABLE IF NOT EXISTS completed_requests (
   id INTEGER PRIMARY KEY,
   floor INTEGER NOT NULL,
@@ -697,16 +658,10 @@ Content-Type: application/json
   completed_tick INTEGER NOT NULL,
   assigned_elevator_id INTEGER NOT NULL
 );</code></pre>
-    <p>
-      将运行态请求和历史请求分离，方便完成记录被 Python 脚本或 SQL 查询读取，用于后续绘制算法对比图和统计完成时间。
-    </p>
+    <p>将运行态请求和历史请求分离，方便完成记录被 Python 脚本或 SQL 查询读取，用于后续绘制算法对比图和统计完成时间。</p>
 
     <h3>2.6 前端实现</h3>
-    <p>
-      前端使用 Vue 3 构建单页应用，核心状态来自后端 <code>/api/state</code> 的轮询结果。页面主体由大楼视图、
-      右侧控制面板和日志终端组成。大楼视图展示各电梯当前所在楼层、方向和楼层请求按钮；控制面板负责系统配置、
-      调度算法切换、cabin 请求和紧急制动；日志终端记录用户操作与请求完成事件。
-    </p>
+    <p>前端使用 Vue 3 构建单页应用，核心状态来自后端 <code>/api/state</code> 的轮询结果。页面主体由大楼视图、右侧控制面板和日志终端组成。大楼视图展示各电梯当前所在楼层、方向和楼层请求按钮；控制面板负责系统配置、调度算法切换、cabin 请求和紧急制动；日志终端记录用户操作与请求完成事件。</p>
     <ul>
       <li>楼层上/下行按钮：提交 hall 请求。</li>
       <li>选中电梯后设置目标楼层：提交 cabin 请求。</li>
@@ -715,17 +670,17 @@ Content-Type: application/json
       <li>紧急制动按钮：触发指定电梯暂停固定 tick 数。</li>
       <li>事件日志：记录请求创建、完成和配置变更。</li>
     </ul>
-    <p>
-      前端轮询间隔通过 <code>GET /api/config</code> 读取后端配置。系统节奏调整时
-      只需要修改后端默认值，前端刷新节奏会随配置同步。
-    </p>
+    <p>前端轮询间隔通过 <code>GET /api/config</code> 读取后端配置。系统节奏调整时只需要修改后端默认值，前端刷新节奏会随配置同步。</p>
+
+    <figure class="figure">
+      <img class="screenshot" src="../img/readme-show.png" alt="前端整体运行截图">
+      <figcaption>图 2-1 前端整体运行界面截图</figcaption>
+    </figure>
+
+    <blockquote class="quote">后续补图建议：这里应使用实际运行截图，不使用示意图。建议补充 2 到 3 张局部截图，分别展示“楼层 hall 请求按钮与电梯井道”、“右侧控制面板中的算法切换和 cabin 请求”、“紧急制动触发后电梯状态与日志终端”。截图应来自浏览器真实页面，文件可放在 <code>img/</code> 或 <code>docs/assets/</code> 下，再用 <code>&lt;figure&gt;</code> + <code>&lt;img&gt;</code> + <code>&lt;figcaption&gt;</code> 引用。</blockquote>
 
     <h3>2.7 测试策略</h3>
-    <p>
-      后端测试覆盖了核心模型、调度器、cost 函数、API 输入校验、系统重启、cabin 请求分配、紧急制动和
-      SQLite 持久化等逻辑。测试主要使用 Go 标准库 <code>testing</code>、<code>httptest</code> 和临时目录数据库，
-      避免污染真实运行数据。
-    </p>
+    <p>后端测试覆盖了核心模型、调度器、cost 函数、API 输入校验、系统重启、cabin 请求分配、紧急制动和 SQLite 持久化等逻辑。测试主要使用 Go 标准库 <code>testing</code>、<code>httptest</code> 和临时目录数据库，避免污染真实运行数据。</p>
     <table>
       <thead>
         <tr>
@@ -756,9 +711,7 @@ Content-Type: application/json
     <pre><code>go test ./...
 go test -race ./...</code></pre>
 
-    <div class="note">
-      截至本报告当前版本，HTML 内容只完成第 1 章和第 2 章。后续章节将继续补充调度算法、Go 并发模型和总结。
-    </div>
+    <div class="note">截至本报告当前版本，HTML 内容只完成第 1 章和第 2 章。后续章节将继续补充调度算法、Go 并发模型和总结。</div>
   </main>
 </body>
 </html>
