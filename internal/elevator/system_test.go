@@ -9,12 +9,13 @@ import (
 func TestStepMovesElevatorAfterRequest(t *testing.T) {
 	// system, err := NewSystem(20, 5, 1, 2, 1)
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -59,12 +60,13 @@ func TestStepMovesElevatorAfterRequest(t *testing.T) {
 
 func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -134,12 +136,13 @@ func TestStepOpensDoorAfterReachingTarget(t *testing.T) {
 
 func TestStepUsesTicksPerFloor(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    3,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      3,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -186,12 +189,13 @@ func TestStepUsesTicksPerFloor(t *testing.T) {
 
 func TestAddRequestRejectsInvalidFloors(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -208,12 +212,13 @@ func TestAddRequestRejectsInvalidFloors(t *testing.T) {
 
 func TestAddRequestAcceptsBoundaryFloors(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -239,12 +244,13 @@ func TestAddRequestAcceptsBoundaryFloors(t *testing.T) {
 
 func TestNewSystemStoresTimingParameters(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           12,
-		ElevatorCount:    3,
-		TicksPerFloor:    7,
-		DoorBaseTicks:    4,
-		TickPerPassenger: 2,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             12,
+		ElevatorCount:      3,
+		TicksPerFloor:      7,
+		DoorBaseTicks:      4,
+		TickPerPassenger:   2,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -270,12 +276,13 @@ func TestNewSystemStoresTimingParameters(t *testing.T) {
 func TestNewSystemRequestIDAlwaysStartsFromOne(t *testing.T) {
 	// 每次创建新 System（无论数据库文件是否存在），request ID 都从 1 开始。
 	firstSystem, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -291,12 +298,13 @@ func TestNewSystemRequestIDAlwaysStartsFromOne(t *testing.T) {
 	firstSystem.Close()
 
 	secondSystem, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "another.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "another.db"),
 	})
 	if err != nil {
 		t.Fatalf("second NewSystem returned error: %v", err)
@@ -314,12 +322,13 @@ func TestNewSystemRequestIDAlwaysStartsFromOne(t *testing.T) {
 
 func TestStepWithElevatorRunnersAdvancesEachElevator(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    2,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      2,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -360,6 +369,57 @@ func startElevatorRunnersForTest(t *testing.T, system *System) {
 	t.Cleanup(cancel)
 }
 
+func TestEmergencyStopPausesElevatorForConfiguredTicks(t *testing.T) {
+	system, err := NewSystem(SystemConfig{
+		Floors:             20,
+		ElevatorCount:      1,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 3,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
+	})
+	if err != nil {
+		t.Fatalf("NewSystem returned error: %v", err)
+	}
+	defer system.Close()
+	startElevatorRunnersForTest(t, system)
+
+	system.Elevators[0].Stops = []StopPlan{
+		{Floor: 5, Reason: StopReasonCabin, Direction: DirectionIdle},
+	}
+
+	elevator, err := system.TriggerEmergencyStop(1)
+	if err != nil {
+		t.Fatalf("TriggerEmergencyStop returned error: %v", err)
+	}
+	if !elevator.EmergencyStop {
+		t.Fatal("emergencyStop = false, want true")
+	}
+	if elevator.EmergencyRemainingTicks != 3 {
+		t.Fatalf("emergency remaining ticks = %d, want 3", elevator.EmergencyRemainingTicks)
+	}
+
+	for tick := 1; tick <= 3; tick++ {
+		if err := system.Step(); err != nil {
+			t.Fatalf("Step %d returned error: %v", tick, err)
+		}
+		if system.Elevators[0].CurrentFloor != 1 {
+			t.Fatalf("after emergency tick %d, floor = %d, want 1", tick, system.Elevators[0].CurrentFloor)
+		}
+	}
+	if system.Elevators[0].EmergencyStop {
+		t.Fatal("emergencyStop = true after configured pause, want false")
+	}
+
+	if err := system.Step(); err != nil {
+		t.Fatalf("Step after emergency returned error: %v", err)
+	}
+	if system.Elevators[0].CurrentFloor != 2 {
+		t.Fatalf("floor after emergency cleared = %d, want 2", system.Elevators[0].CurrentFloor)
+	}
+}
+
 func TestStopPlanKeepsSameFloorDifferentReasonsSeparate(t *testing.T) {
 	elevator := Elevator{}
 
@@ -395,12 +455,13 @@ func TestStopPlanKeepsSameFloorDifferentReasonsSeparate(t *testing.T) {
 
 func TestCabinRequestAssignedImmediatelyToCorrectElevator(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)
@@ -438,12 +499,13 @@ func TestCabinRequestAssignedImmediatelyToCorrectElevator(t *testing.T) {
 
 func TestCabinRequestRejectsInvalidElevatorID(t *testing.T) {
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    3,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      3,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)

@@ -12,23 +12,25 @@ import (
 
 func main() {
 	const (
-		defaultFloorCount       = 20
-		defaultElevatorCount    = 5
-		defaultTicksPerFloor    = 2
-		defaultDoorBaseTicks    = 4
-		defaultTickPerPassenger = 1
-		defaultAutoStepInterval = 250 * time.Millisecond
+		defaultFloorCount         = 20
+		defaultElevatorCount      = 5
+		defaultTicksPerFloor      = 2
+		defaultDoorBaseTicks      = 4
+		defaultTickPerPassenger   = 1
+		defaultEmergencyStopTicks = 20
+		defaultAutoStepInterval   = 250 * time.Millisecond
 	)
 
 	dbPath := fmt.Sprintf("data/requests_%de_%df_scan_%d.db", defaultElevatorCount, defaultFloorCount, time.Now().Unix())
 
 	config := elevator.SystemConfig{
-		Floors:           defaultFloorCount,
-		ElevatorCount:    defaultElevatorCount,
-		TicksPerFloor:    defaultTicksPerFloor,
-		DoorBaseTicks:    defaultDoorBaseTicks,
-		TickPerPassenger: defaultTickPerPassenger,
-		DatabasePath:     dbPath,
+		Floors:             defaultFloorCount,
+		ElevatorCount:      defaultElevatorCount,
+		TicksPerFloor:      defaultTicksPerFloor,
+		DoorBaseTicks:      defaultDoorBaseTicks,
+		TickPerPassenger:   defaultTickPerPassenger,
+		EmergencyStopTicks: defaultEmergencyStopTicks,
+		DatabasePath:       dbPath,
 	}
 
 	system, err := elevator.NewSystem(config)

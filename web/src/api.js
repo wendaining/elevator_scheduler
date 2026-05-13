@@ -98,3 +98,20 @@ export async function setElevatorCount(elevatorCount) {
   }
   return response.json()
 }
+
+/**
+ * 触发某部电梯的报警暂停。
+ * 暂停 tick 数由后端配置决定，前端不硬编码。
+ * @param {number} elevatorId — 电梯 ID
+ */
+export async function triggerElevatorEmergency(elevatorId) {
+  const response = await fetch(`${BASE}/elevator-emergency`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ elevatorId }),
+  })
+  if (!response.ok) {
+    throw new Error(`POST /api/elevator-emergency failed: ${response.status}`)
+  }
+  return response.json()
+}

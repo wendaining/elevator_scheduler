@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os_sp26_proj1/internal/elevator"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -231,6 +232,7 @@ func TestHandleConfigReturnsAutoStepInterval(t *testing.T) {
 		TicksPerFloor      int   `json:"ticksPerFloor"`
 		DoorBaseTicks      int   `json:"doorBaseTicks"`
 		TickPerPassenger   int   `json:"tickPerPassenger"`
+		EmergencyStopTicks int   `json:"emergencyStopTicks"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("Decode response returned error: %v", err)
@@ -247,6 +249,9 @@ func TestHandleConfigReturnsAutoStepInterval(t *testing.T) {
 	}
 	if body.TickPerPassenger != 1 {
 		t.Fatalf("tick per passenger = %d, want 1", body.TickPerPassenger)
+	}
+	if body.EmergencyStopTicks != 7 {
+		t.Fatalf("emergency stop ticks = %d, want 7", body.EmergencyStopTicks)
 	}
 }
 
@@ -303,6 +308,68 @@ func TestRegisterRoutesDoesNotExposeManualStep(t *testing.T) {
 	}
 }
 
+func TestHandleElevatorEmergencyTriggersConfiguredPause(t *testing.T) {
+	server := newTestServer(t)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/elevator-emergency",
+		strings.NewReader(`{"elevatorId":2}`),
+	)
+
+	server.handleElevatorEmergency(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d; body = %s", response.Code, http.StatusOK, response.Body.String())
+	}
+
+	var body struct {
+		Status                  string            `json:"status"`
+		ElevatorID              int               `json:"elevatorId"`
+		EmergencyStop           bool              `json:"emergencyStop"`
+		EmergencyRemainingTicks int               `json:"emergencyRemainingTicks"`
+		Elevator                elevator.Elevator `json:"elevator"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("Decode response returned error: %v", err)
+	}
+
+	if body.Status != "emergency triggered" {
+		t.Fatalf("status = %q, want emergency triggered", body.Status)
+	}
+	if body.ElevatorID != 2 || body.Elevator.ID != 2 {
+		t.Fatalf("elevator ID = response %d nested %d, want 2", body.ElevatorID, body.Elevator.ID)
+	}
+	if !body.EmergencyStop {
+		t.Fatal("emergencyStop = false, want true")
+	}
+	if body.EmergencyRemainingTicks != 7 {
+		t.Fatalf("emergency remaining ticks = %d, want 7", body.EmergencyRemainingTicks)
+	}
+	if !server.System.Elevators[1].EmergencyStop {
+		t.Fatal("system elevator emergencyStop = false, want true")
+	}
+}
+
+func TestHandleElevatorEmergencyRejectsInvalidElevator(t *testing.T) {
+	server := newTestServer(t)
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/elevator-emergency",
+		strings.NewReader(`{"elevatorId":99}`),
+	)
+
+	server.handleElevatorEmergency(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	assertTextError(t, response.Body.String())
+}
+
 func createRequestForTest(t *testing.T, server *Server, body string) elevator.Request {
 	t.Helper()
 
@@ -327,12 +394,13 @@ func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
 	config := elevator.SystemConfig{
-		Floors:           20,
-		ElevatorCount:    5,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     ":memory:",
+		Floors:             20,
+		ElevatorCount:      5,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 7,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	}
 	system, err := elevator.NewSystem(config)
 	if err != nil {

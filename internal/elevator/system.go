@@ -19,11 +19,14 @@ func NewSystem(sc SystemConfig) (*System, error) {
 	if sc.TicksPerFloor < 1 {
 		return nil, fmt.Errorf("ticks per floor must be at least 1, got %d", sc.TicksPerFloor)
 	}
-	if sc.DoorBaseTicks < 0 {
-		return nil, fmt.Errorf("door base ticks must be at least 0, got %d", sc.DoorBaseTicks)
+	if sc.DoorBaseTicks < 1 {
+		return nil, fmt.Errorf("door base ticks must be at least 1, got %d", sc.DoorBaseTicks)
 	}
-	if sc.TickPerPassenger < 0 {
-		return nil, fmt.Errorf("tick per passenger must be at least 0, got %d", sc.TickPerPassenger)
+	if sc.TickPerPassenger < 1 {
+		return nil, fmt.Errorf("tick per passenger must be at least 1, got %d", sc.TickPerPassenger)
+	}
+	if sc.EmergencyStopTicks < 1 {
+		return nil, fmt.Errorf("emergency stop ticks must be at least 1, got %d", sc.EmergencyStopTicks)
 	}
 
 	requestStore, err := OpenRequestStore(sc.DatabasePath)
@@ -34,32 +37,34 @@ func NewSystem(sc SystemConfig) (*System, error) {
 	elevators := make([]Elevator, sc.ElevatorCount)
 	for i := range elevators {
 		elevators[i] = Elevator{
-			ID:                 i + 1,
-			CurrentFloor:       1,
-			Direction:          DirectionIdle,
-			ScanDirection:      DirectionUp,
-			DoorOpen:           false,
-			Stops:              []StopPlan{},
-			MoveRemainingTicks: 0,
-			DoorRemainingTicks: 0,
-			EmergencyStop:      false,
+			ID:                      i + 1,
+			CurrentFloor:            1,
+			Direction:               DirectionIdle,
+			ScanDirection:           DirectionUp,
+			DoorOpen:                false,
+			Stops:                   []StopPlan{},
+			MoveRemainingTicks:      0,
+			DoorRemainingTicks:      0,
+			EmergencyRemainingTicks: 0,
+			EmergencyStop:           false,
 		}
 	}
 
 	scheduler := SCANScheduler{}
 
 	return &System{
-		FloorCount:       sc.Floors,
-		CurrentTick:      0,
-		TicksPerFloor:    sc.TicksPerFloor,
-		DoorBaseTicks:    sc.DoorBaseTicks,
-		TickPerPassenger: sc.TickPerPassenger,
-		Elevators:        elevators,
-		Requests:         map[int64]*Request{},
-		SchedulerName:    scheduler.Name(),
-		scheduler:        scheduler,
-		requestStore:     requestStore,
-		nextRequestID:    1,
+		FloorCount:         sc.Floors,
+		CurrentTick:        0,
+		TicksPerFloor:      sc.TicksPerFloor,
+		DoorBaseTicks:      sc.DoorBaseTicks,
+		TickPerPassenger:   sc.TickPerPassenger,
+		EmergencyStopTicks: sc.EmergencyStopTicks,
+		Elevators:          elevators,
+		Requests:           map[int64]*Request{},
+		SchedulerName:      scheduler.Name(),
+		scheduler:          scheduler,
+		requestStore:       requestStore,
+		nextRequestID:      1,
 	}, nil
 }
 
@@ -143,6 +148,26 @@ func (s *System) SetScheduler(name string) error {
 	return nil
 }
 
+// TriggerEmergencyStop 触发指定电梯的报警暂停。
+//
+// elevatorID 使用对用户更直观的 1-based 编号。
+// 报警不是永久开关，而是暂停 EmergencyStopTicks 个 tick 后自动恢复。
+func (s *System) TriggerEmergencyStop(elevatorID int) (*Elevator, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if elevatorID < 1 || elevatorID > len(s.Elevators) {
+		return nil, fmt.Errorf("elevator ID must be between 1 and %d, got %d", len(s.Elevators), elevatorID)
+	}
+
+	elevator := &s.Elevators[elevatorID-1]
+	elevator.EmergencyStop = true
+	elevator.EmergencyRemainingTicks = s.EmergencyStopTicks
+	elevator.Direction = DirectionIdle
+
+	return elevator, nil
+}
+
 // Close 停止所有后台 goroutine 并释放外部资源。
 func (s *System) Close() error {
 	if s == nil {
@@ -211,7 +236,7 @@ func (s *System) stepWithElevatorRunners() error {
 	for i := range s.Elevators {
 		elevators[i] = cloneElevator(s.Elevators[i])
 	}
-	currentTick := s.CurrentTick
+	completedTick := s.CurrentTick
 	ticksPerFloor := s.TicksPerFloor
 	doorBaseTicks := s.DoorBaseTicks
 	s.mu.Unlock()
@@ -222,7 +247,6 @@ func (s *System) stepWithElevatorRunners() error {
 		doneChannels[i] = done
 		command := elevatorTickCommand{
 			elevator:      elevators[i],
-			currentTick:   currentTick,
 			ticksPerFloor: ticksPerFloor,
 			doorBaseTicks: doorBaseTicks,
 			done:          done,
@@ -253,7 +277,7 @@ func (s *System) stepWithElevatorRunners() error {
 	for i, result := range results {
 		s.Elevators[i] = result.elevator
 		for _, requestID := range result.completedRequestIDs {
-			if err := s.completeRequest(requestID, currentTick); err != nil {
+			if err := s.completeRequest(requestID, completedTick); err != nil {
 				return err
 			}
 		}

@@ -8,7 +8,6 @@ import (
 // 命令中带的是这部电梯的状态副本和本次 tick 所需的只读配置。
 type elevatorTickCommand struct {
 	elevator      Elevator
-	currentTick   int
 	ticksPerFloor int
 	doorBaseTicks int
 	done          chan elevatorTickResult
@@ -48,14 +47,14 @@ func (s *System) StartElevatorRunners(ctx context.Context) {
 		close(done)
 	}()
 
-	for elevatorIndex, commandChannel := range commands {
-		go s.runElevator(runnerCtx, elevatorIndex, commandChannel)
+	for _, commandChannel := range commands {
+		go s.runElevator(runnerCtx, commandChannel)
 	}
 }
 
 // runElevator 是单部电梯 goroutine 的运行循环。
 // 它不断等待 tick 命令，收到后只推进自己负责的那一部电梯。
-func (s *System) runElevator(ctx context.Context, elevatorIndex int, commands <-chan elevatorTickCommand) {
+func (s *System) runElevator(ctx context.Context, commands <-chan elevatorTickCommand) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,7 +62,6 @@ func (s *System) runElevator(ctx context.Context, elevatorIndex int, commands <-
 		case command := <-commands:
 			elevator, completedRequestIDs, err := stepElevatorState(
 				command.elevator,
-				command.currentTick,
 				command.ticksPerFloor,
 				command.doorBaseTicks,
 			)
@@ -94,9 +92,15 @@ func moveOneTick(e *Elevator, floorDelta int, ticksPerFloor int) {
 
 // stepElevatorState 是单部电梯的纯状态推进函数。
 // 它只读输入参数，返回更新后的 Elevator 和本 tick 完成的请求 ID。
-func stepElevatorState(e Elevator, currentTick int, ticksPerFloor int, doorBaseTicks int) (Elevator, []int64, error) {
+func stepElevatorState(e Elevator, ticksPerFloor int, doorBaseTicks int) (Elevator, []int64, error) {
 	if e.EmergencyStop {
 		e.Direction = DirectionIdle
+		if e.EmergencyRemainingTicks > 0 {
+			e.EmergencyRemainingTicks--
+		}
+		if e.EmergencyRemainingTicks == 0 {
+			e.EmergencyStop = false
+		}
 		return e, nil, nil
 	}
 

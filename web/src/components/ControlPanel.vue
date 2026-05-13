@@ -74,7 +74,17 @@
       <div v-if="selectedElevator" class="cabin-card">
         <div class="cabin-selected">
           <span>已选中</span>
-          <strong>#{{ selectedElevator.id }}</strong>
+          <div class="cabin-selected-actions">
+            <strong>#{{ selectedElevator.id }}</strong>
+            <button
+              class="emergency-button"
+              :class="{ active: selectedElevator.emergencyStop }"
+              :disabled="submittingEmergency"
+              type="button"
+              aria-label="触发报警"
+              @click="submitEmergency"
+            />
+          </div>
         </div>
         <div class="field">
           <div class="field-header">
@@ -114,6 +124,7 @@ import {
   setElevatorCount,
   setFloorCount,
   setScheduler,
+  triggerElevatorEmergency,
 } from '../api.js'
 import LogTerminal from './LogTerminal.vue'
 
@@ -134,6 +145,7 @@ const elevatorDraft = ref(1)
 const schedulerDraft = ref('first-available')
 const cabinFloor = ref(1)
 const submittingCabin = ref(false)
+const submittingEmergency = ref(false)
 const editingFloor = ref(false)
 const editingElevator = ref(false)
 
@@ -221,6 +233,20 @@ async function submitCabinRequest() {
     appendLog(`cabin 请求失败：${err.message}`)
   } finally {
     submittingCabin.value = false
+  }
+}
+
+async function submitEmergency() {
+  if (!selectedElevator.value) return
+
+  submittingEmergency.value = true
+  try {
+    const response = await triggerElevatorEmergency(props.selectedElevatorId)
+    appendLog(`报警触发：Cabin #${response.elevatorId} 暂停 ${response.emergencyRemainingTicks} tick`, response.currentTick)
+  } catch (err) {
+    appendLog(`报警触发失败：${err.message}`)
+  } finally {
+    submittingEmergency.value = false
   }
 }
 </script>
@@ -352,6 +378,38 @@ async function submitCabinRequest() {
 .cabin-selected strong {
   font-size: 18px;
   color: #1f5f99;
+}
+
+.cabin-selected-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.emergency-button {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid #991b1b;
+  background: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.emergency-button:hover:not(:disabled) {
+  background: #b91c1c;
+  transform: translateY(-1px);
+}
+
+.emergency-button.active {
+  background: #7f1d1d;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.24);
+}
+
+.emergency-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .empty-cabin {

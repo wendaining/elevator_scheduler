@@ -119,12 +119,13 @@ func newCostTestSystem(t *testing.T) *System {
 	t.Helper()
 
 	system, err := NewSystem(SystemConfig{
-		Floors:           20,
-		ElevatorCount:    3,
-		TicksPerFloor:    1,
-		DoorBaseTicks:    2,
-		TickPerPassenger: 1,
-		DatabasePath:     filepath.Join(t.TempDir(), "requests.db"),
+		Floors:             20,
+		ElevatorCount:      3,
+		TicksPerFloor:      1,
+		DoorBaseTicks:      2,
+		TickPerPassenger:   1,
+		EmergencyStopTicks: 20,
+		DatabasePath:       filepath.Join(t.TempDir(), "requests.db"),
 	})
 	if err != nil {
 		t.Fatalf("NewSystem returned error: %v", err)

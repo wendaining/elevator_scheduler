@@ -8,14 +8,14 @@ import (
 	"io"
 	"net/http"
 	"os_sp26_proj1/internal/elevator"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
 // Server 持有所有 HTTP handler 需要的依赖。
 type Server struct {
-	System *elevator.System
-
+	System           *elevator.System
 	mu               sync.Mutex
 	config           elevator.SystemConfig
 	baseCtx          context.Context
@@ -41,6 +41,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/scheduler", s.handleScheduler)
 	mux.HandleFunc("/api/floor-count", s.handleFloorCount)
 	mux.HandleFunc("/api/elevator-count", s.handleElevatorCount)
+	mux.HandleFunc("/api/elevator-emergency", s.handleElevatorEmergency)
 	mux.Handle("/", http.FileServer(http.Dir("web/dist")))
 }
 
@@ -59,7 +60,10 @@ func (s *Server) restartSystemLocked(floorCount, elevatorCount int, schedulerNam
 	newConfig := s.config
 	newConfig.Floors = floorCount
 	newConfig.ElevatorCount = elevatorCount
-	newConfig.DatabasePath = fmt.Sprintf("data/requests_%de_%df_%s_%d.db", elevatorCount, floorCount, schedulerName, time.Now().Unix())
+	newConfig.DatabasePath = filepath.Join(
+		filepath.Dir(s.config.DatabasePath),
+		fmt.Sprintf("requests_%de_%df_%s_%d.db", elevatorCount, floorCount, schedulerName, time.Now().Unix()),
+	)
 	newSystem, err := elevator.NewSystem(newConfig)
 	if err != nil {
 		return err
@@ -114,6 +118,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"ticksPerFloor":      s.config.TicksPerFloor,
 		"doorBaseTicks":      s.config.DoorBaseTicks,
 		"tickPerPassenger":   s.config.TickPerPassenger,
+		"emergencyStopTicks": s.config.EmergencyStopTicks,
 	}
 	s.mu.Unlock()
 
@@ -294,6 +299,41 @@ func (s *Server) handleElevatorCount(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"status":        "system restarted",
 		"elevatorCount": p.ElevatorCount,
+	})
+}
+
+func (s *Server) handleElevatorEmergency(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type emergencyPayload struct {
+		ElevatorID int `json:"elevatorId"`
+	}
+	var p emergencyPayload
+	if err := decodeJSONBody(r, &p); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updatedElevator, err := s.System.TriggerEmergencyStop(p.ElevatorID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":                  "emergency triggered",
+		"elevator":                *updatedElevator,
+		"elevatorId":              updatedElevator.ID,
+		"currentTick":             s.System.CurrentTick,
+		"emergencyStop":           updatedElevator.EmergencyStop,
+		"emergencyRemainingTicks": updatedElevator.EmergencyRemainingTicks,
 	})
 }
 
