@@ -14,6 +14,8 @@
 
 ## 开发环境
 
+WSL2 Ubuntu 24.04.4 LTS
+
 推荐使用 Docker 启动。也可以在本机直接安装 Go 和 Node.js 后手动启动。
 
 ## 快速开始：Docker 版本（推荐）
