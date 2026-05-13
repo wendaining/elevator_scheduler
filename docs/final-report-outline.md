@@ -25,11 +25,14 @@
 ## 写作和排版规则
 
 - HTML 正文中，一个 `<p>` 或表达完整语义的 `<div>` 尽量写成单行，不在标签内部手动换行；代码块、表格、列表和复杂图形结构除外。
-- 某个设计点如果单独使用 `<h4>` 展开，附近同等重要的设计点也应补充 `<h4>`，避免只有一个细节被突出。例如核心数据模型中不只讲紧急制动，也应讲 `StopPlan`、tick 时间模型、运行态请求表等。
+- 不要为了某个局部实现细节单独开一个小标题，尤其是该细节只是整体设计中的一个点时。更好的写法是先给出本节代码/架构总览，再在总览后的段落或表格中说明关键设计点；只有当多个点处在同一抽象层级、且都值得展开时，才使用并列 `<h4>`。
+- 报告首次引入领域术语时要先定义，再继续讨论设计。尤其是 `hall`、`cabin`、`pending`、`assigned`、`done`、`StopPlan`、`CurrentTick`、`Direction`、`ScanDirection` 等贯穿全文的概念，不能假定读者已经理解。
+- 报告里的代码总览如果用于解释设计，应在代码块里补简短字段注释，让读者知道每组字段承担什么职责；不要只列字段名。
 - 报告中的架构图、流程图不要只是几个普通方块并排。优先用 CSS、SVG 或少量 JS 构建有层次的图：至少包含方向箭头、编号、分组、连线、标签、色彩编码和明确 caption，让读者一眼看出“数据如何流动”或“步骤如何推进”。复杂流程可以直接画成 Mermaid 风格的内联 SVG，避免箭头在窄宽度截图中消失。
 - 判断一个流程图是否合格时，不能只看节点是否美观，还要看截图中是否能清楚看到方向箭头、判断分支、回流路径和关键边标签。若卡片式 CSS 图在实际渲染中仍像“几块内容堆叠”，应改用内联 SVG 明确绘制 path、marker arrow、菱形判断节点和循环线。
 - 前端章节的配图必须优先使用实际运行截图，不使用纯示意图替代。截图应说明具体展示什么交互状态，例如楼层请求、电梯井道、控制面板、算法切换、紧急制动、日志终端。
 - 如果当前还没有截图文件，可以在 HTML 中用 `<blockquote class="quote">` 写明后续应补哪张实际截图、截图应放在哪里、用什么 `<figure>` 格式引用。
+- 一旦实际截图已经补入 HTML，就应删除对应的“后续补图建议”占位，改成正文解释截图展示了哪些交互状态。
 - 如果某一节的数据支撑还不充分，不要勉强写结论或放不公平的图表；先用醒目的 TODO 说明后续需要补什么实验、什么指标、什么图表。
 - 修改报告时要搜索并处理 HTML 注释中的 TODO。能当场完成的直接改正文；不能完成的转成报告内可见的 TODO 说明，避免隐藏注释被遗漏。
 
@@ -70,19 +73,15 @@
 ### 2.3 核心数据模型
 
 - 领域对象：`Direction`、`Request`（含 `RequestStatus` 三态）、`StopPlan`、`Elevator`、`System`
+- 在展开设计点前先解释核心术语和字段：`hall` 表示楼层外部上下行请求，`cabin` 表示轿厢内目标楼层请求；`pending/assigned/done` 表示请求生命周期；`StopPlan` 表示电梯实际执行的停靠动作；`Direction` 是即时运动方向，`ScanDirection` 是调度算法的长期扫描方向。
+- 写法建议：先给出核心结构体字段总览，再用表格解释关键设计点如何共同服务“请求创建 → 分配 → 执行 → 完成”的生命周期，不要为 `StopPlan`、紧急制动、tick 等单个点分别开一串小标题。
 - 设计要点：
   - `StopPlan` 替代 `[]int`：同一楼层上/下行请求不会错误合并，区分 hall_up / hall_down / cabin
   - `Requests map[int64]*Request`：哈希表 O(1) 查找，运行态只保留 pending+assigned
   - `RequestHistory` → SQLite：完成后从运行态 map 删除，写入数据库，避免状态无限增长，方便后续数据分析
-  - `CurrentTick` 全局离散时钟：所有时间以 tick 为单位
+  - `CurrentTick` 全局离散时钟：所有时间以 tick 为单位；要解释 tick 不是现实秒，而是每次 `Step()` 推进的模拟时间单位。`CreatedTick`、`AssignedTick`、`CompletedTick` 用于统计等待和完成时间，`TicksPerFloor`、`DoorBaseTicks`、`TickPerPassenger`、`EmergencyRemainingTicks` 用于表达移动、开门、上下客和报警暂停耗时。
   - cabin 请求直接分配给指定电梯，不进入 pending（cabin 请求不需要调度）
   - `EmergencyStop` + `EmergencyRemainingTicks`：报警暂停固定 tick 数后自动恢复
-- 建议 `<h4>` 小节：
-  - 请求状态与运行态存储
-  - hall 请求与 cabin 请求
-  - 停靠计划 `StopPlan`
-  - 时间片与运行节奏（`CurrentTick`、`TicksPerFloor`、`DoorBaseTicks`、`TickPerPassenger`）
-  - 电梯状态与紧急制动
 - **建议配图**：核心结构体关系图（Request → Elevator → System）
 
 ### 2.4 HTTP API 设计
@@ -190,14 +189,16 @@
 ### 4.2 Go 并发基础
 
 - goroutine：`go f()` 启动，比 OS 线程轻量
-- channel：`ch <- v` / `v := <-ch`，goroutine 间通信
-- select：同时等待多个 channel
+- channel：`ch <- v` / `v := <-ch`，goroutine 间通信；应说明“不要通过共享内存来通信，而要通过通信来共享内存”
+- select：同时等待多个 channel；需要解释它在本项目中如何让 runner 同时等待 tick 命令和退出信号
 - mutex：`sync.Mutex`，不可重入
-- context：控制 goroutine 生命周期，`ctx.Done()` 通知退出
+- context：控制 goroutine 生命周期，`ctx.Done()` 通知退出；需要面向不熟悉 Go 的读者解释“系统重启或关闭时，如何通知后台 goroutine 退出，避免旧 runner 泄漏”
 - Goroutine vs OS Thread：点到关键区别即可
+- 写法建议：可以为 goroutine、channel、mutex、select/context 分别使用同级小标题，因为它们属于同一抽象层级的 Go 并发基础概念。
 
 ### 4.3 本项目的并发设计
 
+- 写法建议：先给出 `System`、`elevatorTickCommand`、`elevatorTickResult` 的代码总览，再解释关键设计点。不要把 `cloneElevator` 或 API handler 边界单独开成小标题，它们属于并发设计总览中的局部约束。
 - **两把锁**：
   - `mu` — 保护共享数据
   - `stepMu` — 保护 tick 边界
@@ -206,13 +207,15 @@
   - Step → `elevatorTickCommand`（含状态副本）→ 电梯 goroutine
   - 电梯 goroutine → `elevatorTickResult`（新状态 + 完成请求 ID）→ Step 合并
 - **核心原则**：goroutine 不直接写共享 System；状态拷贝 → 独立计算 → 回传 → 统一合并
-- **`cloneElevator`**：Go 切片共享底层数组，并发必须深拷贝
+- 在并发设计总览中解释 `cloneElevator`：Go 切片共享底层数组，分发给 runner 前必须深拷贝；这是状态副本设计的一部分，不单独开小节。
 - **建议配图**：完整 tick 执行流程图（调度 → 分发 → 并行计算 → 合并 → tick++）
+- 并发启动顺序不要只用代码块表示，优先用图展示 `NewSystem → elevator runners → auto step ticker → HTTP server`。
 - **可行性落脚点**：`go test -race` 全部通过验证了并发安全
 
 ### 4.4 数据竞争与 `go test -race`
 
 - 什么是数据竞争，为什么并发代码必须检查
+- 简要解释 race detector 原理：运行时插桩监测不同 goroutine 的读写访问，并根据 mutex、channel、原子操作等同步事件判断是否存在未同步的冲突访问
 - 本项目 `go test -race ./...` 全部通过
 
 ---
