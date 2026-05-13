@@ -38,7 +38,7 @@ coverage.out
 
 # Local binaries
 os_sp26_proj1
-server
+
 
 # Frontend dependencies and build outputs
 node_modules/
