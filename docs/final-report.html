@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>电梯调度算法可视化程序设计报告</title>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #596579;
+      --line: #d9e0ea;
+      --paper: #ffffff;
+      --soft: #f5f7fb;
+      --accent: #1f5f99;
+      --accent-soft: #eaf3ff;
+      --code: #101827;
+      --danger: #b91c1c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #eef2f7;
+      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+      line-height: 1.75;
+    }
+
+    .page {
+      width: min(1080px, calc(100% - 40px));
+      margin: 28px auto;
+      padding: 56px 64px 72px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 50px rgba(23, 32, 51, 0.08);
+    }
+
+    .cover {
+      padding-bottom: 34px;
+      border-bottom: 2px solid var(--ink);
+      margin-bottom: 32px;
+      text-align: center;
+    }
+
+    .cover .school {
+      color: var(--muted);
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.35;
+      letter-spacing: 0.02em;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 36px;
+      width: min(640px, 100%);
+      margin: 34px auto 0;
+      text-align: left;
+      font-size: 15px;
+    }
+
+    .meta div {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+
+    .meta strong {
+      display: inline-block;
+      min-width: 88px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .abstract {
+      margin: 28px 0;
+      padding: 18px 22px;
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+    }
+
+    .abstract h2,
+    .toc h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+
+    .keywords {
+      margin-top: 10px;
+      color: var(--muted);
+    }
+
+    .toc {
+      margin: 28px 0 38px;
+      padding: 18px 22px;
+      border: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding-left: 24px;
+    }
+
+    h2.section {
+      margin: 44px 0 18px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 25px;
+      line-height: 1.35;
+    }
+
+    h3 {
+      margin: 28px 0 10px;
+      font-size: 19px;
+      line-height: 1.45;
+    }
+
+    h4 {
+      margin: 20px 0 8px;
+      font-size: 16px;
+    }
+
+    p {
+      margin: 8px 0 12px;
+      text-align: justify;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 14px;
+      padding-left: 26px;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: #0f172a;
+      background: #eef2f7;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 14px 0;
+      padding: 16px 18px;
+      overflow: auto;
+      color: #dbeafe;
+      background: var(--code);
+      border-radius: 6px;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 20px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+      text-align: left;
+      font-weight: 700;
+    }
+
+    .figure {
+      margin: 18px 0 22px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .figure figcaption {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .screenshot {
+      display: block;
+      max-width: 100%;
+      max-height: 420px;
+      margin: 0 auto;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .layer-diagram {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .layer {
+      min-height: 86px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      padding: 12px;
+      border: 1px solid #b9d5ef;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      text-align: center;
+    }
+
+    .layer strong {
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .layer span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .note {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid #94a3b8;
+      background: #f8fafc;
+      color: #334155;
+    }
+
+    .danger {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .route {
+      white-space: nowrap;
+      font-family: "JetBrains Mono", "Consolas", monospace;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        width: 100%;
+        margin: 0;
+        padding: 28mm 24mm;
+        border: none;
+        box-shadow: none;
+      }
+
+      h2.section {
+        page-break-before: auto;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        width: 100%;
+        margin: 0;
+        padding: 28px 18px 42px;
+      }
+
+      .meta,
+      .layer-diagram {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="cover">
+      <div class="school">操作系统课程项目设计报告</div>
+      <h1>电梯调度算法可视化程序</h1>
+      <div class="subtitle">基于 Go 并发模型与 Web 前端的多电梯调度系统</div>
+      <div class="meta">
+        <div><strong>项目类型</strong>课程设计 / 综合实践</div>
+        <div><strong>技术栈</strong>Go、SQLite、Vue 3、Vite</div>
+        <div><strong>核心内容</strong>调度算法、HTTP API、并发模型</div>
+        <div><strong>运行方式</strong>Docker Compose / 本机启动</div>
+      </div>
+    </section>
+
+    <section class="abstract">
+      <h2>摘要</h2>
+      <p>
+        本项目实现了一个面向操作系统课程的电梯调度算法可视化系统。系统以多部电梯共享楼层请求为基本场景，
+        将乘客请求类比为待调度任务，将电梯类比为资源执行单元，由调度器决定请求分配，并由每部电梯的独立
+        goroutine 推进运行状态。后端使用 Go 标准库 <code>net/http</code> 提供 API，使用 SQLite 保存已完成请求；
+        前端使用 Vue 3、Element Plus 与 Vite 实现可交互的楼层请求、轿厢请求、算法切换和运行日志展示。
+      </p>
+      <div class="keywords">
+        <strong>关键词：</strong>电梯调度；操作系统；Go；goroutine；HTTP API；Vue；SQLite
+      </div>
+    </section>
+
+    <nav class="toc">
+      <h2>目录</h2>
+      <ol>
+        <li>项目概述</li>
+        <li>系统设计与实现</li>
+      </ol>
+    </nav>
+
+    <h2 class="section">1. 项目概述</h2>
+
+    <h3>1.1 项目背景</h3>
+    <p>
+      电梯调度问题是操作系统调度问题的一个直观类比：多部电梯对应多个可执行资源，楼层请求和轿厢内请求对应等待被处理的任务，调度算法需要在公平性、响应速度和资源利用率之间作出权衡。本项目以一栋默认 20 层、5 部电梯的大楼为基础场景，但在实现上将楼层数、电梯数和运行节奏设计为可配置参数，便于测试不同规模下的调度行为。
+    </p>
+    <p>
+      与只实现单个算法的命令行模拟程序不同，本项目同时关注“算法执行过程是否可观察”和“并发模型是否清晰”。
+      因此系统提供 Web 可视化界面，支持在前端直接发起 hall 请求、cabin 请求、紧急制动和调度算法切换，
+      后端持续推进离散 tick，并将当前系统状态通过 HTTP API 暴露给前端。
+    </p>
+
+    <h3>1.2 项目目标</h3>
+    <ul>
+      <li>实现一个可运行的多电梯调度系统，支持楼层外部请求、轿厢内部请求和电梯状态展示。</li>
+      <li>实现并切换多种调度算法，包括 First Available、Nearest Idle、FCFS、SCAN 和 LOOK。</li>
+      <li>使用 Go 的 goroutine 和 channel 表达“每部电梯作为独立执行单元”的并发模型。</li>
+      <li>通过 HTTP API 和 Vue 前端完成前后端通信，并将调度过程可视化。</li>
+      <li>使用 SQLite 保存已完成请求，为后续算法统计和实验对比提供数据来源。</li>
+    </ul>
+
+    <h3>1.3 系统运行流程</h3>
+    <p>
+      系统启动后，后端创建 <code>System</code> 实例和电梯运行 goroutine，并由自动 ticker 周期性调用
+      <code>Step()</code> 推进模拟时间。前端页面通过轮询 <code>GET /api/state</code> 获取系统快照，
+      用户在界面中点击楼层按钮或提交轿厢请求后，前端向后端发送 HTTP 请求，后端将请求写入运行态数据结构，
+      再由当前调度器在后续 tick 中完成分配。
+    </p>
+
+    <figure class="figure">
+      <div class="layer-diagram">
+        <div class="layer">
+          <strong>Web 前端</strong>
+          <span>提交请求、展示状态、切换算法</span>
+        </div>
+        <div class="layer">
+          <strong>HTTP API</strong>
+          <span>解析 JSON、校验输入、返回状态</span>
+        </div>
+        <div class="layer">
+          <strong>调度器</strong>
+          <span>选择响应请求的电梯</span>
+        </div>
+        <div class="layer">
+          <strong>电梯运行层</strong>
+          <span>每部电梯独立 goroutine 推进状态</span>
+        </div>
+        <div class="layer">
+          <strong>SQLite</strong>
+          <span>保存已完成请求历史</span>
+        </div>
+      </div>
+      <figcaption>图 1-1 系统运行流程概览</figcaption>
+    </figure>
+
+    <h3>1.4 技术栈与运行方式</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>模块</th>
+          <th>技术选择</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>后端语言</td>
+          <td>Go</td>
+          <td>利用 goroutine、channel 和 <code>sync.Mutex</code> 实现并发模型与状态同步。</td>
+        </tr>
+        <tr>
+          <td>HTTP 服务</td>
+          <td><code>net/http</code></td>
+          <td>使用 Go 标准库实现 REST API</td>
+        </tr>
+        <tr>
+          <td>数据持久化</td>
+          <td>SQLite</td>
+          <td>单文件数据库，简单轻便，方便数据统计。</td>
+        </tr>
+        <tr>
+          <td>前端</td>
+          <td>Vue 3 + Element Plus + Vite</td>
+          <td>用于构建交互式可视化界面，Vite dev proxy 用于开发环境 API 转发。</td>
+        </tr>
+        <tr>
+          <td>环境封装</td>
+          <td>Docker Compose</td>
+          <td>同时启动后端和前端，便于在不同机器上复现运行环境。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Docker 版本启动方式（推荐）</h4>
+    <pre><code>docker compose up</code></pre>
+    <p>启动成功后访问前端页面：</p>
+    <pre><code>http://localhost:5173</code></pre>
+    <p>后端 API 默认监听：</p>
+    <pre><code>http://localhost:8080</code></pre>
+
+    <h4>普通本机启动方式</h4>
+    <pre><code># 启动后端
+go run ./cmd/server
+
+# 另开终端启动前端
+cd web
+npm install
+npm run dev</code></pre>
+
+    <figure class="figure">
+      <img class="screenshot" src="../img/readme-show.png" alt="系统运行界面截图">
+      <figcaption>图 1-2 系统运行界面示意</figcaption>
+    </figure>
+
+    <h2 class="section">2. 系统设计与实现</h2>
+
+    <h3>2.1 系统架构概览</h3>
+    <p>
+      系统采用前后端分离但部署简单的结构。前端负责渲染大楼、电梯、请求按钮和配置面板；后端负责维护状态，
+      所有请求创建、调度算法切换、系统重启和紧急制动均通过 API 进入后端。调度层不直接处理 HTTP，
+      而是围绕 <code>System</code>、<code>Request</code>、<code>Elevator</code> 和 <code>Scheduler</code>
+      等核心类型实现业务逻辑。
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>层次</th>
+          <th>主要文件或目录</th>
+          <th>职责</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>程序入口</td>
+          <td><code>cmd/server/main.go</code></td>
+          <td>创建系统配置、初始化电梯系统、启动自动 tick、注册 HTTP 路由。</td>
+        </tr>
+        <tr>
+          <td>API 层</td>
+          <td><code>internal/api/handler.go</code></td>
+          <td>接收前端请求，完成 JSON 解码、输入校验、系统调用和响应编码。</td>
+        </tr>
+        <tr>
+          <td>核心模型</td>
+          <td><code>internal/elevator/model.go</code>、<code>system.go</code></td>
+          <td>定义电梯、请求、停靠计划和系统状态，并提供状态推进方法。</td>
+        </tr>
+        <tr>
+          <td>调度层</td>
+          <td><code>internal/elevator/*Scheduler.go</code></td>
+          <td>实现不同调度策略，统一通过 <code>Scheduler</code> 接口调用。</td>
+        </tr>
+        <tr>
+          <td>电梯运行层</td>
+          <td><code>internal/elevator/elevator_runner.go</code></td>
+          <td>每部电梯使用独立 goroutine 接收 tick 命令并计算下一状态。</td>
+        </tr>
+        <tr>
+          <td>持久化层</td>
+          <td><code>internal/elevator/request_store.go</code></td>
+          <td>将完成请求写入 SQLite，供后续统计和算法对比使用。</td>
+        </tr>
+        <tr>
+          <td>前端</td>
+          <td><code>web/src</code></td>
+          <td>实现状态轮询、请求提交、控制面板、日志终端和可视化布局。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      调度算法和电梯运行逻辑都位于后端核心模型中，前端只通过 API 操作系统状态，不会复制调度逻辑；SQLite 只记录历史数据，不参与每个 tick 的关键路径，因此不会影响运行态调度性能。
+    </p>
+
+    <h3>2.2 项目结构</h3>
+    <pre><code>os_sp26_proj1/
+├── cmd/server/          # Go 服务入口
+├── internal/api/        # HTTP API handler 与自动步进逻辑
+├── internal/elevator/   # 电梯模型、调度算法、并发运行、SQLite 持久化
+├── web/                 # Vue 3 + Element Plus + Vite 前端
+├── docs/                # 开发记录、设计文档和最终报告
+├── analysis/            # 调度实验与图表输出
+├── scripts/             # 本地分析脚本
+├── data/                # 运行时生成的 SQLite 数据库
+├── img/                 # README 和报告使用的图片资源
+└── docker-compose.yml   # Docker Compose 启动配置
+</code></pre>
+    <p>
+      Go 项目中 <code>internal</code> 目录表示内部包，不希望被仓库外部直接导入。该结构使 API 层和电梯核心模型
+      在同一后端项目中保持清晰边界：<code>internal/api</code> 关心 HTTP 输入输出，<code>internal/elevator</code>
+      关心调度和状态推进。
+    </p>
+
+    <h3>2.3 核心数据模型</h3>
+    <p>
+      系统的核心数据模型围绕请求、停靠计划、电梯和系统四类对象展开：
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>类型</th>
+          <th>关键字段</th>
+          <th>设计说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Direction</code></td>
+          <td><code>idle</code>、<code>up</code>、<code>down</code></td>
+          <td>统一描述电梯运动方向和请求方向。</td>
+        </tr>
+        <tr>
+          <td><code>Request</code></td>
+          <td><code>ID</code>、<code>Floor</code>、<code>Kind</code>、<code>Status</code></td>
+          <td>表示 hall 或 cabin 请求，状态包括 pending、assigned、done。</td>
+        </tr>
+        <tr>
+          <td><code>StopPlan</code></td>
+          <td><code>Floor</code>、<code>Reason</code>、<code>RequestIDs</code></td>
+          <td>描述一次停靠及其原因，同一停靠可完成多个请求。</td>
+        </tr>
+        <tr>
+          <td><code>Elevator</code></td>
+          <td><code>CurrentFloor</code>、<code>Direction</code>、<code>Stops</code></td>
+          <td>保存单部电梯当前状态、后续停靠计划和门/移动倒计时。</td>
+        </tr>
+        <tr>
+          <td><code>System</code></td>
+          <td><code>Elevators</code>、<code>Requests</code>、<code>CurrentTick</code></td>
+          <td>保存全局运行态状态，是调度器和 API 共同操作的核心对象。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>2.3.1 请求状态与运行态存储</h4>
+    <p>
+      <code>Requests map[int64]*Request</code> 只保存 pending 和 assigned 状态的请求。请求完成后会被
+      <code>completeRequest</code> 标记为 done，写入 SQLite，然后从运行态 map 中删除。这样可以保持运行态
+      数据结构轻量，同时保留完整历史记录用于实验统计。
+    </p>
+
+    <h4>2.3.2 hall 请求与 cabin 请求</h4>
+    <p>
+      hall 请求来自楼层外部，需要由调度算法决定分配给哪部电梯；cabin 请求来自某部电梯内部，属于指定电梯，
+      在 <code>AddRequest</code> 中直接分配给对应电梯，不进入 pending 状态。
+    </p>
+
+    <h4>2.3.3 紧急制动</h4>
+    <p>
+      电梯模型包含 <code>EmergencyStop</code> 和 <code>EmergencyRemainingTicks</code>。当前端触发紧急制动后，
+      后端将指定电梯设置为报警暂停状态，并设置剩余暂停 tick 数。后续每个 tick 中，该电梯保持 idle，
+      直到倒计时归零后自动恢复运行。暂停时长由 <code>SystemConfig.EmergencyStopTicks</code> 配置，在
+      <code>cmd/server/main.go</code> 中与其他默认运行参数统一设置。
+    </p>
+
+    <h3>2.4 HTTP API 设计</h3>
+    <p>
+      后端 API 采用 JSON 作为请求和响应格式。所有会修改系统状态的接口使用 POST，只读接口使用 GET。
+      handler 层会拒绝不匹配的方法、非法 JSON、未知字段和不合法业务参数。
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>方法</th>
+          <th>路径</th>
+          <th>功能</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GET</td>
+          <td class="route">/api/health</td>
+          <td>健康检查，返回服务是否可用。</td>
+        </tr>
+        <tr>
+          <td>GET</td>
+          <td class="route">/api/config</td>
+          <td>返回前端轮询和展示所需配置，如自动 tick 间隔、移动耗时、开门耗时和紧急制动 tick 数。</td>
+        </tr>
+        <tr>
+          <td>GET</td>
+          <td class="route">/api/state</td>
+          <td>返回完整系统快照，包括楼层数、电梯状态、运行态请求和当前调度算法。</td>
+        </tr>
+        <tr>
+          <td>POST</td>
+          <td class="route">/api/request</td>
+          <td>创建 hall 或 cabin 请求。</td>
+        </tr>
+        <tr>
+          <td>POST</td>
+          <td class="route">/api/scheduler</td>
+          <td>切换调度算法，并重建系统运行周期。</td>
+        </tr>
+        <tr>
+          <td>POST</td>
+          <td class="route">/api/floor-count</td>
+          <td>调整楼层数，重启系统。</td>
+        </tr>
+        <tr>
+          <td>POST</td>
+          <td class="route">/api/elevator-count</td>
+          <td>调整电梯数，重启系统。</td>
+        </tr>
+        <tr>
+          <td>POST</td>
+          <td class="route">/api/elevator-emergency</td>
+          <td>触发指定电梯的紧急制动。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>2.4.1 请求示例</h4>
+    <p>创建楼层外部上行请求：</p>
+    <pre><code>POST /api/request
+Content-Type: application/json
+
+{
+  "floor": 6,
+  "direction": "up",
+  "kind": "hall"
+}</code></pre>
+
+    <p>创建 3 号电梯内部到 12 楼的请求：</p>
+    <pre><code>POST /api/request
+Content-Type: application/json
+
+{
+  "floor": 12,
+  "direction": "idle",
+  "kind": "cabin",
+  "elevatorId": 3
+}</code></pre>
+
+    <p>触发 4 号电梯紧急制动：</p>
+    <pre><code>POST /api/elevator-emergency
+Content-Type: application/json
+
+{
+  "elevatorId": 4
+}</code></pre>
+
+    <div class="note">
+      <strong>错误处理约定：</strong>非法输入返回 400，方法不匹配返回 405，服务器内部状态或编码错误返回 500。
+      JSON 解码使用 <code>DisallowUnknownFields</code>，避免前端提交未定义字段后被后端静默忽略。
+    </div>
+
+    <h3>2.5 SQLite 持久化</h3>
+    <p>
+      系统使用 SQLite 保存已完成请求。数据库表 <code>completed_requests</code> 的字段与 <code>Request</code>
+      结构基本对应，包括请求 ID、楼层、方向、请求来源、状态、创建 tick、分配 tick、完成 tick 和响应电梯 ID。
+      请求完成时，后端调用 <code>RequestStore.SaveCompletedRequest</code> 写入数据库。
+    </p>
+    <pre><code>CREATE TABLE IF NOT EXISTS completed_requests (
+  id INTEGER PRIMARY KEY,
+  floor INTEGER NOT NULL,
+  direction TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_tick INTEGER NOT NULL,
+  assigned_tick INTEGER NOT NULL,
+  completed_tick INTEGER NOT NULL,
+  assigned_elevator_id INTEGER NOT NULL
+);</code></pre>
+    <p>
+      将运行态请求和历史请求分离，方便完成记录被 Python 脚本或 SQL 查询读取，用于后续绘制算法对比图和统计完成时间。
+    </p>
+
+    <h3>2.6 前端实现</h3>
+    <p>
+      前端使用 Vue 3 构建单页应用，核心状态来自后端 <code>/api/state</code> 的轮询结果。页面主体由大楼视图、
+      右侧控制面板和日志终端组成。大楼视图展示各电梯当前所在楼层、方向和楼层请求按钮；控制面板负责系统配置、
+      调度算法切换、cabin 请求和紧急制动；日志终端记录用户操作与请求完成事件。
+    </p>
+    <ul>
+      <li>楼层上/下行按钮：提交 hall 请求。</li>
+      <li>选中电梯后设置目标楼层：提交 cabin 请求。</li>
+      <li>调度算法下拉框：调用 <code>/api/scheduler</code> 切换算法。</li>
+      <li>楼层数和电梯数滑块：调用后端重启系统。</li>
+      <li>紧急制动按钮：触发指定电梯暂停固定 tick 数。</li>
+      <li>事件日志：记录请求创建、完成和配置变更。</li>
+    </ul>
+    <p>
+      前端轮询间隔通过 <code>GET /api/config</code> 读取后端配置。系统节奏调整时
+      只需要修改后端默认值，前端刷新节奏会随配置同步。
+    </p>
+
+    <h3>2.7 测试策略</h3>
+    <p>
+      后端测试覆盖了核心模型、调度器、cost 函数、API 输入校验、系统重启、cabin 请求分配、紧急制动和
+      SQLite 持久化等逻辑。测试主要使用 Go 标准库 <code>testing</code>、<code>httptest</code> 和临时目录数据库，
+      避免污染真实运行数据。
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>测试类型</th>
+          <th>覆盖内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>模型测试</td>
+          <td>请求创建、边界楼层、tick 推进、开门完成、请求持久化。</td>
+        </tr>
+        <tr>
+          <td>调度器测试</td>
+          <td>FCFS、SCAN、LOOK、Nearest Idle 等算法的分配结果和停靠顺序。</td>
+        </tr>
+        <tr>
+          <td>API 测试</td>
+          <td>请求创建、非法输入、配置返回、算法切换、紧急制动接口。</td>
+        </tr>
+        <tr>
+          <td>并发安全测试</td>
+          <td>使用 <code>go test -race ./...</code> 检查数据竞争。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>当前验证命令如下，两项均已通过：</p>
+    <pre><code>go test ./...
+go test -race ./...</code></pre>
+
+    <div class="note">
+      截至本报告当前版本，HTML 内容只完成第 1 章和第 2 章。后续章节将继续补充调度算法、Go 并发模型和总结。
+    </div>
+  </main>
+</body>
+</html>
